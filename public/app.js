@@ -113,6 +113,9 @@ function navigate(page) {
   const pageEl = document.getElementById('page-' + page);
   if (pageEl) pageEl.style.display = 'block';
 
+  // Load page data
+  if (page === 'inspections' && typeof loadInspections === 'function') loadInspections();
+
   const sidebarBtns = document.querySelectorAll('.sidebar-item');
   sidebarBtns.forEach(b => {
     if (b.textContent.toLowerCase().includes(page)) b.classList.add('active');
