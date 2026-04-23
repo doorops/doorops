@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f172a">
+  <title>DoorOps</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="auth-screen">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="logo-mark">⬡</div>
+          <div class="logo-text">DoorOps</div>
+          <div class="logo-tagline">Field ops for door companies</div>
+        </div>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" onclick="showTab('login')">Sign In</button>
+          <button class="auth-tab" onclick="showTab('signup')">Start Free Trial</button>
+        </div>
+
+        <!-- Login Form -->
+        <form id="login-form" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="login-email" placeholder="you@company.com" required autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+          </div>
+          <div id="login-error" class="auth-error" style="display:none;"></div>
+          <button type="submit" class="btn-auth">Sign In</button>
+        </form>
+
+        <!-- Signup Form -->
+        <form id="signup-form" style="display:none;" onsubmit="handleSignup(event)">
+          <div class="form-group">
+            <label>Company Name</label>
+            <input type="text" id="signup-company" placeholder="Acme Overhead Doors" required>
+          </div>
+          <div class="form-group">
+            <label>Your Name</label>
+            <input type="text" id="signup-name" placeholder="John Smith" required>
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="signup-email" placeholder="you@company.com" required autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="signup-password" placeholder="Min 8 characters" required minlength="8" autocomplete="new-password">
+          </div>
+          <div id="signup-error" class="auth-error" style="display:none;"></div>
+          <button type="submit" class="btn-auth">Start 14-Day Free Trial</button>
+          <p class="auth-fine-print">No credit card required. Cancel anytime.</p>
+        </form>
+      </div>
+    </div>
+
+    <!-- App Shell (shown after login) -->
+    <div id="app-shell" style="display:none;">
+      <!-- Nav -->
+      <nav class="top-nav">
+        <div class="nav-brand">⬡ DoorOps</div>
+        <div class="nav-company" id="nav-company-name"></div>
+        <button class="nav-menu-btn" onclick="toggleMenu()">☰</button>
+      </nav>
+
+      <!-- Sidebar -->
+      <div id="sidebar" class="sidebar">
+        <div class="sidebar-section">
+          <button class="sidebar-item active" onclick="navigate('dashboard')">📊 Dashboard</button>
+          <button class="sidebar-item" onclick="navigate('inspections')">🔍 Inspections</button>
+          <button class="sidebar-item" onclick="navigate('po')">📦 Purchase Orders</button>
+          <button class="sidebar-item" onclick="navigate('team')">👥 Team</button>
+          <button class="sidebar-item" onclick="navigate('settings')">⚙️ Settings</button>
+        </div>
+        <div class="sidebar-bottom">
+          <button class="sidebar-item" onclick="handleLogout()">→ Sign Out</button>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <main id="main-content" class="main-content">
+        <div id="page-dashboard" class="page active">
+          <h1>Welcome to DoorOps 🚪</h1>
+          <p style="color:var(--muted);margin-bottom:32px;">Your field operations hub. More features coming soon.</p>
+          <div class="dash-grid">
+            <div class="dash-card" onclick="navigate('inspections')">
+              <div class="dash-icon">🔍</div>
+              <div class="dash-label">Inspections</div>
+              <div class="dash-sub">Commercial door reports</div>
+            </div>
+            <div class="dash-card" onclick="navigate('po')">
+              <div class="dash-icon">📦</div>
+              <div class="dash-label">Purchase Orders</div>
+              <div class="dash-sub">Vendors & line items</div>
+            </div>
+            <div class="dash-card" onclick="navigate('team')">
+              <div class="dash-icon">👥</div>
+              <div class="dash-label">Team</div>
+              <div class="dash-sub">Staff & roles</div>
+            </div>
+            <div class="dash-card" onclick="navigate('settings')">
+              <div class="dash-icon">⚙️</div>
+              <div class="dash-label">Settings</div>
+              <div class="dash-sub">Jobber, billing, profile</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="page-inspections" class="page" style="display:none;">
+          <h1>Inspections</h1>
+          <p style="color:var(--muted);">Coming soon — commercial door inspection reports with deficiency tracking and PDF generation.</p>
+        </div>
+
+        <div id="page-po" class="page" style="display:none;">
+          <h1>Purchase Orders</h1>
+          <p style="color:var(--muted);">Coming soon — create and manage purchase orders with HST, vendor tracking, and PDF export.</p>
+        </div>
+
+        <div id="page-team" class="page" style="display:none;">
+          <h1>Team</h1>
+          <p style="color:var(--muted);">Coming soon — invite staff, manage roles, track hours.</p>
+        </div>
+
+        <div id="page-settings" class="page" style="display:none;">
+          <h1>Settings</h1>
+          <div class="settings-section">
+            <h3>Account</h3>
+            <p style="color:var(--muted);" id="settings-info"></p>
+          </div>
+          <div class="settings-section">
+            <h3>Integrations</h3>
+            <p style="color:var(--muted);">Jobber integration coming soon.</p>
+          </div>
+          <div class="settings-section">
+            <h3>Billing</h3>
+            <p style="color:var(--muted);">Subscription management coming soon.</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
