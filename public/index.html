@@ -79,7 +79,6 @@
         <div class="sidebar-section">
           <button class="sidebar-item active" onclick="navigate('dashboard')">📊 Dashboard</button>
           <button class="sidebar-item" onclick="navigate('inspections')">🔍 Inspections</button>
-          <button class="sidebar-item" onclick="navigate('po')">📦 Purchase Orders</button>
           <button class="sidebar-item" onclick="navigate('team')">👥 Team</button>
           <button class="sidebar-item" onclick="navigate('settings')">⚙️ Settings</button>
         </div>
@@ -99,11 +98,6 @@
               <div class="dash-label">Inspections</div>
               <div class="dash-sub">Commercial door reports</div>
             </div>
-            <div class="dash-card" onclick="navigate('po')">
-              <div class="dash-icon">📦</div>
-              <div class="dash-label">Purchase Orders</div>
-              <div class="dash-sub">Vendors & line items</div>
-            </div>
             <div class="dash-card" onclick="navigate('team')">
               <div class="dash-icon">👥</div>
               <div class="dash-label">Team</div>
@@ -120,11 +114,6 @@
         <div id="page-inspections" class="page" style="display:none;">
           <h1>Inspections</h1>
           <p style="color:var(--muted);">Coming soon — commercial door inspection reports with deficiency tracking and PDF generation.</p>
-        </div>
-
-        <div id="page-po" class="page" style="display:none;">
-          <h1>Purchase Orders</h1>
-          <p style="color:var(--muted);">Coming soon — create and manage purchase orders with HST, vendor tracking, and PDF export.</p>
         </div>
 
         <div id="page-team" class="page" style="display:none;">
