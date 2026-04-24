@@ -29,7 +29,7 @@ async function refreshToken(companyId, refreshToken) {
       refresh_token: refreshToken
     });
     const { access_token, refresh_token, expires_in } = resp.data;
-    const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
+    const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : null;
 
     await db.query(
       'UPDATE companies SET jobber_access_token=$1, jobber_refresh_token=$2, jobber_token_expires_at=$3 WHERE id=$4',
@@ -118,11 +118,11 @@ router.get('/callback', async (req, res) => {
     });
 
     const { access_token, refresh_token, expires_in } = tokenResp.data;
-    const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
+    const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : null;
 
     await db.query(
       'UPDATE companies SET jobber_access_token=$1, jobber_refresh_token=$2, jobber_token_expires_at=$3 WHERE id=$4',
-      [access_token, refresh_token, expiresAt, companyId]
+      [access_token, refresh_token || null, expiresAt, companyId]
     );
 
     // Close popup and notify parent window
