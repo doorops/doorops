@@ -376,13 +376,13 @@ function renderInspectionOverview() {
     </div>` : ''}
 
     <div class="insp-complete-bar">
-      <button class="btn-complete${allComplete ? ' btn-complete-ready' : ''}"
-              ${allComplete && (insp.status === 'draft' || insp.status === 'in_progress') ? '' : 'disabled'}
-              onclick="completeInspection()">
+      <button class="btn-complete${allComplete || insp.status === 'complete' || insp.status === 'published' || insp.status === 'sent' ? ' btn-complete-ready' : ''}"
+              ${!allComplete && insp.status !== 'complete' && insp.status !== 'published' && insp.status !== 'sent' ? 'disabled' : ''}
+              onclick="${insp.status === 'complete' || insp.status === 'published' || insp.status === 'sent' ? 'renderInspectionComplete()' : 'completeInspection()'}">
         ${allComplete && (insp.status === 'draft' || insp.status === 'in_progress')
           ? '✅ Complete Report'
           : insp.status === 'complete' || insp.status === 'published' || insp.status === 'sent'
-            ? '✅ Report Complete'
+            ? '✅ View Report Summary'
             : 'Complete all doors to finish'}
       </button>
     </div>`;
@@ -791,8 +791,8 @@ async function confirmComplete(id) {
 
   const updated = await apiInsp('/' + id, 'GET');
   _currentInspection = await updated.json();
-  renderInspectionOverview();
   showToast('✅ Inspection marked complete!');
+  renderInspectionComplete();
 }
 
 // ─── SEND REPORT ─────────────────────────────────────────────────────────────
@@ -919,6 +919,304 @@ async function createJobberQuote(inspectionId) {
 
   showToast('✓ Quote #' + data.quote_number + ' created in Jobber!');
   if (data.url && confirm('Open in Jobber?')) window.open(data.url, '_blank');
+}
+
+
+// ─── INSPECTION COMPLETE SCREEN ──────────────────────────────────────────────
+function renderInspectionComplete() {
+  const page = document.getElementById('page-inspections');
+  if (!page || !_currentInspection) return;
+  const insp = _currentInspection;
+  const doors = insp.doors || [];
+  const defs  = insp.deficiencies || [];
+
+  // Count ratings
+  let goodCount = 0, fairCount = 0, poorCount = 0, totalItems = 0;
+  doors.forEach(door => {
+    (door.findings || []).forEach(f => {
+      if (f.rating === 'na' || !f.rating) return;
+      totalItems++;
+      if (f.rating === 'good' || f.rating === 'pass') goodCount++;
+      else if (f.rating === 'fair' || f.rating === 'needs_attention') fairCount++;
+      else if (f.rating === 'poor' || f.rating === 'fail') poorCount++;
+    });
+  });
+
+  // Deficiency blocks grouped by door
+  const defBlocks = doors.map(door => {
+    const issues = (door.findings || []).filter(f =>
+      f.rating === 'fair' || f.rating === 'needs_attention' ||
+      f.rating === 'poor' || f.rating === 'fail');
+    if (!issues.length) return '';
+    const locLabel = door.location_label || door.location || ('Door ' + door.door_number);
+    return '<div style="margin-bottom:12px;">' +
+      '<div style="font-weight:700;font-size:0.88rem;margin-bottom:4px;">' +
+      '\uD83D\uDEAA ' + escDO(locLabel) + '</div>' +
+      issues.map(f => {
+        const isBad = f.rating === 'poor' || f.rating === 'fail';
+        const ratingLabels = { fair:'Fair', needs_attention:'Needs Attn', poor:'Poor', fail:'Fail' };
+        return '<div style="padding:7px 10px;border-left:3px solid ' + (isBad ? '#ef4444' : '#f59e0b') +
+          ';margin-bottom:4px;font-size:0.83rem;background:#fafafa;border-radius:0 6px 6px 0;">' +
+          '<div style="font-weight:600;">' + escDO(f.item || f.template_label || 'Item') + '</div>' +
+          '<div style="color:var(--muted);font-size:0.78rem;">' +
+          (ratingLabels[f.rating] || f.rating) +
+          (f.deficiency ? ' \u2014 ' + escDO(f.deficiency.title) : '') + '</div></div>';
+      }).join('') + '</div>';
+  }).join('');
+
+  page.innerHTML = '<div style="padding:16px;">' +
+
+    // Header
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">' +
+      '<button onclick="renderInspectionOverview()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px;">' +
+        '\u2190</button>' +
+      '<div>' +
+        '<div style="font-weight:700;font-size:1rem;">\u2705 Report Complete</div>' +
+        '<div style="font-size:0.8rem;color:var(--muted);">' + escDO(insp.property_name || insp.property_address) + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    // Stats card
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;">' +
+      '<div style="display:flex;gap:10px;margin-bottom:10px;">' +
+        '<div style="flex:1;background:#e8f5e922;border:1px solid #2e7d3233;border-radius:8px;padding:12px 8px;text-align:center;">' +
+          '<div style="font-size:1.8rem;font-weight:800;color:#2e7d32;">' + goodCount + '</div>' +
+          '<div style="font-size:0.72rem;font-weight:700;color:#2e7d32;">Good / Pass</div>' +
+        '</div>' +
+        '<div style="flex:1;background:#fff3e022;border:1px solid #e6510033;border-radius:8px;padding:12px 8px;text-align:center;">' +
+          '<div style="font-size:1.8rem;font-weight:800;color:#e65100;">' + fairCount + '</div>' +
+          '<div style="font-size:0.72rem;font-weight:700;color:#e65100;">Fair / Attn</div>' +
+        '</div>' +
+        '<div style="flex:1;background:#ffebee22;border:1px solid #c6282833;border-radius:8px;padding:12px 8px;text-align:center;">' +
+          '<div style="font-size:1.8rem;font-weight:800;color:#c62828;">' + poorCount + '</div>' +
+          '<div style="font-size:0.72rem;font-weight:700;color:#c62828;">Poor / Fail</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:0.82rem;color:var(--muted);text-align:center;">' +
+        doors.length + ' door' + (doors.length !== 1 ? 's' : '') + ' \u00b7 ' + totalItems + ' items inspected' +
+      '</div>' +
+    '</div>' +
+
+    // Deficiency block
+    (defs.length > 0
+      ? '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;">' +
+          '<div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;">' +
+            '\u26a0\ufe0f Deficiencies (' + defs.length + ')</div>' +
+          (defBlocks || defs.map(d =>
+            '<div style="padding:7px 10px;border-left:3px solid ' +
+              (d.severity === 'safety_critical' ? '#ef4444' : d.severity === 'moderate' ? '#f59e0b' : '#22c55e') +
+              ';margin-bottom:4px;font-size:0.83rem;background:#fafafa;border-radius:0 6px 6px 0;">' +
+              '<div style="font-weight:600;">' + escDO(d.title || d.description || 'Issue') + '</div>' +
+              '<div style="font-size:0.75rem;color:var(--muted);text-transform:capitalize;">' +
+                (d.severity || '').replace('_',' ') + '</div></div>'
+          ).join('')) +
+        '</div>'
+      : '<div style="background:#e8f5e9;border:1px solid #2e7d3233;border-radius:12px;padding:14px;margin-bottom:12px;text-align:center;">' +
+          '<div style="font-size:1.5rem;margin-bottom:4px;">\uD83C\uDF89</div>' +
+          '<div style="font-weight:700;color:#2e7d32;">No deficiencies found!</div>' +
+          '<div style="font-size:0.82rem;color:#2e7d32;margin-top:2px;">All items passed inspection.</div>' +
+        '</div>') +
+
+    // Share Report card
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;">' +
+      '<div style="font-weight:600;font-size:0.9rem;margin-bottom:10px;">' +
+        '\uD83D\uDD17 Share Report</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">' +
+        '<button class="btn-primary-do" style="flex:1;min-width:140px;font-size:0.85rem;padding:9px 12px;"' +
+          ' onclick="getInspectionReportLink(' + insp.id + ')">' +
+          '\uD83D\uDD17 Get Shareable Link</button>' +
+        '<button style="flex:1;min-width:130px;font-size:0.85rem;padding:9px 12px;background:var(--surface);' +
+          'border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;"' +
+          ' onclick="openInspectionReportPdf(' + insp.id + ')">' +
+          '\uD83D\uDCC4 Download PDF</button>' +
+      '</div>' +
+      '<div id="report-link-result"></div>' +
+    '</div>' +
+
+    // Send to Customer card
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;">' +
+      '<div style="font-weight:600;font-size:0.9rem;margin-bottom:10px;">\uD83D\uDCE7 Send Report to Customer</div>' +
+      '<div class="do-form-group" style="margin-bottom:8px;">' +
+        '<label style="font-size:0.8rem;">Customer Email</label>' +
+        '<input type="email" id="complete-email" value="' + escDO(insp.contact_email || '') + '"' +
+          ' placeholder="customer@example.com" style="width:100%;">' +
+      '</div>' +
+      '<button class="btn-primary-do" style="width:100%;font-size:0.85rem;"' +
+        ' onclick="sendInspectionReportEmail(' + insp.id + ')">' +
+        '\uD83D\uDCE7 Send Report</button>' +
+      '<div id="send-report-result" style="margin-top:6px;font-size:0.82rem;"></div>' +
+    '</div>' +
+
+    // Link to Jobber Job card
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;">' +
+      '<div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">\uD83D\uDD17 Link to Jobber Job</div>' +
+      '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">Attach this report as a note on the Jobber job.</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;">' +
+        '<input type="text" id="jobber-jobnumber" placeholder="Job #" value="' + escDO(insp.jobber_job_id || '') + '"' +
+          ' style="flex:1;max-width:140px;">' +
+        '<button style="padding:9px 14px;background:var(--surface);border:1px solid var(--border);' +
+          'border-radius:8px;color:var(--text);font-size:0.85rem;cursor:pointer;"' +
+          ' onclick="attachReportToJobberJob(' + insp.id + ')">' +
+          '\uD83D\uDD17 Link Job</button>' +
+      '</div>' +
+      '<div id="jobber-link-result" style="margin-top:6px;font-size:0.82rem;"></div>' +
+    '</div>' +
+
+    // Draft Jobber Quote (only if deficiencies)
+    (defs.length > 0
+      ? '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;">' +
+          '<div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">\uD83D\uDCCB Draft Jobber Quote</div>' +
+          '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">Creates a Jobber quote with all deficiencies as a single line item.</div>' +
+          '<button id="create-quote-btn" class="btn-primary-do" style="width:100%;font-size:0.85rem;"' +
+            ' onclick="createJobberQuoteFromComplete(' + insp.id + ')">' +
+            '\uD83D\uDCCB Draft Quote in Jobber</button>' +
+          '<div id="create-quote-result" style="margin-top:6px;font-size:0.82rem;"></div>' +
+        '</div>'
+      : '') +
+
+    // Back link
+    '<div style="padding:8px 0 24px;text-align:center;">' +
+      '<a href="#" onclick="renderInspectionOverview();return false;"' +
+        ' style="color:var(--green);font-size:0.88rem;">\u2190 Back to Overview</a>' +
+    '</div>' +
+
+  '</div>';
+}
+
+// ─── REPORT LINK ──────────────────────────────────────────────────────────────
+async function getInspectionReportLink(inspId) {
+  const resultEl = document.getElementById('report-link-result');
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--muted);font-size:0.82rem;">Generating link\u2026</span>';
+  try {
+    const resp = await fetch('/api/inspections/' + inspId + '/report-link', {
+      method: 'POST', credentials: 'include'
+    });
+    if (!resp.ok) { showToast('Failed to generate link', 'error'); return; }
+    const { url } = await resp.json();
+    if (resultEl) {
+      resultEl.innerHTML =
+        '<div style="background:var(--bg,#f5f5f5);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:4px;">' +
+          '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px;">Shareable link:</div>' +
+          '<div style="word-break:break-all;font-size:0.8rem;margin-bottom:8px;">' + escDO(url) + '</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+            '<button style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:0.8rem;cursor:pointer;"' +
+              ' onclick="navigator.clipboard.writeText(\'' + url.replace(/'/g, "\\'") + '\').then(()=>showToast(\'Copied! \u2713\'))">Copy Link</button>' +
+            '<a href="' + escDO(url) + '" target="_blank" rel="noopener"' +
+              ' style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-decoration:none;color:var(--text);">View Report \u2197</a>' +
+          '</div>' +
+        '</div>';
+    }
+  } catch(e) { showToast('Network error', 'error'); }
+}
+
+// ─── PDF VIA REPORT LINK ──────────────────────────────────────────────────────
+async function openInspectionReportPdf(inspId) {
+  try {
+    const resp = await fetch('/api/inspections/' + inspId + '/report-link', {
+      method: 'POST', credentials: 'include'
+    });
+    if (!resp.ok) { showToast('Failed to generate PDF link', 'error'); return; }
+    const { url } = await resp.json();
+    window.open(url, '_blank', 'noopener');
+    const resultEl = document.getElementById('report-link-result');
+    if (resultEl && !resultEl.innerHTML.includes(url)) {
+      resultEl.innerHTML =
+        '<div style="background:var(--bg,#f5f5f5);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:4px;">' +
+          '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px;">Shareable link:</div>' +
+          '<div style="word-break:break-all;font-size:0.8rem;margin-bottom:8px;">' + escDO(url) + '</div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:0.8rem;cursor:pointer;"' +
+              ' onclick="navigator.clipboard.writeText(\'' + url.replace(/'/g, "\\'") + '\').then(()=>showToast(\'Copied! \u2713\'))">Copy Link</button>' +
+            '<a href="' + escDO(url) + '" target="_blank" rel="noopener"' +
+              ' style="padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:0.8rem;text-decoration:none;color:var(--text);">View Report \u2197</a>' +
+          '</div>' +
+        '</div>';
+    }
+  } catch(e) { showToast('Network error', 'error'); }
+}
+
+// ─── SEND REPORT EMAIL ────────────────────────────────────────────────────────
+async function sendInspectionReportEmail(inspId) {
+  const emailVal = document.getElementById('complete-email')?.value?.trim();
+  const resultEl = document.getElementById('send-report-result');
+  if (!emailVal) { showToast('Enter a customer email', 'error'); return; }
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--muted);">Sending\u2026</span>';
+  try {
+    const resp = await fetch('/api/inspections/' + inspId + '/send-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: emailVal })
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--green);">\u2705 Report sent to ' + escDO(data.to || emailVal) + '</span>';
+      showToast('Report sent \u2713');
+    } else {
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger);">\u274c ' + escDO(data.error || 'Send failed') + '</span>';
+    }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger);">Network error</span>';
+  }
+}
+
+// ─── ATTACH REPORT TO JOBBER JOB ─────────────────────────────────────────────
+async function attachReportToJobberJob(inspId) {
+  const jobNumber = document.getElementById('jobber-jobnumber')?.value?.trim();
+  const resultEl  = document.getElementById('jobber-link-result');
+  if (!jobNumber) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger);">Enter a job number first</span>';
+    return;
+  }
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--muted);">Linking\u2026</span>';
+  try {
+    const linkResp = await fetch('/api/inspections/' + inspId + '/report-link', { method: 'POST', credentials: 'include' });
+    if (!linkResp.ok) { if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger);">Could not generate report link</span>'; return; }
+    const { url: reportUrl } = await linkResp.json();
+
+    const resp = await fetch('/api/jobber/job-attach-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ inspectionId: inspId, jobNumber, reportUrl })
+    });
+    const data = await resp.json();
+    if (resp.ok && data.success) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--green);">\u2705 Report linked to Job #' + escDO(String(jobNumber)) + ' in Jobber</span>';
+      showToast('Linked to Jobber Job #' + jobNumber + ' \u2713');
+    } else {
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger);">\u274c ' + escDO(data.error || 'Unknown error') + '</span>';
+    }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger);">Network error</span>';
+  }
+}
+
+// ─── CREATE JOBBER QUOTE (complete screen) ────────────────────────────────────
+async function createJobberQuoteFromComplete(inspId) {
+  const btn      = document.getElementById('create-quote-btn');
+  const resultEl = document.getElementById('create-quote-result');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating quote\u2026'; }
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--muted);">Creating quote in Jobber\u2026</span>';
+  try {
+    const resp = await fetch('/api/jobber/create-quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ inspectionId: inspId })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Failed');
+    if (resultEl) resultEl.innerHTML =
+      '<span style="color:var(--green);">\u2705 Quote #' + data.quoteNumber + ' created! ' +
+      '<a href="' + escDO(data.jobberWebUri) + '" target="_blank" style="color:var(--green);">' +
+      'Open in Jobber \u2197</a></span>';
+    if (btn) btn.textContent = '\u2705 Quote Created';
+    showToast('Quote #' + data.quoteNumber + ' created in Jobber');
+  } catch(err) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger);">\u274c ' + escDO(err.message) + '</span>';
+    if (btn) { btn.disabled = false; btn.textContent = '\uD83D\uDCCB Draft Quote in Jobber'; }
+  }
 }
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────

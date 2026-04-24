@@ -329,4 +329,118 @@ router.post('/quote', requireAuth, async (req, res) => {
   }
 });
 
+// ─── Create quote from inspection deficiencies (complete screen) ──────────────────────────
+router.post('/create-quote', requireAuth, async (req, res) => {
+  const { inspectionId } = req.body;
+  if (!inspectionId) return res.status(400).json({ error: 'inspectionId required' });
+
+  try {
+    const insp = await db.query('SELECT * FROM inspections WHERE id = $1 AND company_id = $2', [inspectionId, req.companyId]);
+    if (!insp.rows.length) return res.status(404).json({ error: 'Inspection not found' });
+    const i = insp.rows[0];
+
+    const defs = await db.query(
+      'SELECT * FROM inspection_deficiencies WHERE inspection_id = $1 ORDER BY severity DESC, created_at',
+      [inspectionId]
+    );
+    if (!defs.rows.length) return res.status(400).json({ error: 'No deficiencies found for this inspection' });
+
+    const defDesc = defs.rows.map((d, idx) => `${idx + 1}. ${d.title || d.description || 'Issue'}`).join('\n');
+
+    // Look up client in Jobber by email
+    let clientId = null;
+    if (i.contact_email) {
+      try {
+        const clientData = await jobberQuery(req.companyId, `
+          query FindClientByEmail($q: String!) {
+            clients(filter: { emails: { address: { eq: $q } } }, first: 1) {
+              nodes { id name }
+            }
+          }
+        `, { q: i.contact_email });
+        clientId = clientData?.clients?.nodes?.[0]?.id || null;
+      } catch (e) {
+        console.warn('[jobber/create-quote] client lookup failed:', e.message);
+      }
+    }
+
+    const input = {
+      title: `Inspection Deficiency Repairs — ${i.property_name || i.property_address}`,
+      lineItems: [{
+        name: 'Inspection Deficiency Repairs',
+        description: defDesc,
+        quantity: 1,
+        unitPrice: 0
+      }]
+    };
+    if (clientId) input.clientId = clientId;
+
+    const data = await jobberQuery(req.companyId, `
+      mutation CreateQuote($input: QuoteCreateInput!) {
+        quoteCreate(input: $input) {
+          quote { id quoteNumber webUri }
+          userErrors { message }
+        }
+      }
+    `, { input });
+
+    const quote = data?.quoteCreate?.quote;
+    const errors = data?.quoteCreate?.userErrors;
+    if (errors?.length) return res.status(400).json({ error: errors[0].message });
+    if (!quote) return res.status(500).json({ error: 'Quote creation failed' });
+
+    await db.query(
+      'UPDATE inspections SET jobber_quote_id=$1, jobber_quote_url=$2, updated_at=NOW() WHERE id=$3',
+      [quote.id, quote.webUri, inspectionId]
+    );
+
+    res.json({ quoteNumber: quote.quoteNumber, jobberWebUri: quote.webUri });
+  } catch (err) {
+    console.error('[jobber/create-quote]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ─── Attach report link to Jobber job as a note ───────────────────────────────────────────────
+router.post('/job-attach-report', requireAuth, async (req, res) => {
+  const { inspectionId, jobNumber, reportUrl } = req.body;
+  if (!jobNumber || !reportUrl) return res.status(400).json({ error: 'jobNumber and reportUrl required' });
+
+  try {
+    // Find job by number
+    const jobData = await jobberQuery(req.companyId, `
+      query FindJob($num: Int!) {
+        jobs(filter: { jobNumber: { eq: $num } }, first: 1) {
+          nodes { id jobNumber }
+        }
+      }
+    `, { num: parseInt(jobNumber) });
+
+    const job = jobData?.jobs?.nodes?.[0];
+    if (!job) return res.status(404).json({ error: `Job #${jobNumber} not found in Jobber` });
+
+    const noteText = `DoorOps Inspection Report attached:\n${reportUrl}`;
+    const noteData = await jobberQuery(req.companyId, `
+      mutation AddJobNote($jobId: EncodedId!, $note: String!) {
+        jobNoteCreate(jobId: $jobId, content: $note) {
+          jobNote { id }
+          userErrors { message }
+        }
+      }
+    `, { jobId: job.id, note: noteText });
+
+    const errors = noteData?.jobNoteCreate?.userErrors;
+    if (errors?.length) return res.status(400).json({ error: errors[0].message });
+
+    if (inspectionId) {
+      await db.query('UPDATE inspections SET jobber_job_id=$1, updated_at=NOW() WHERE id=$2', [String(jobNumber), inspectionId]);
+    }
+
+    res.json({ success: true, jobNumber });
+  } catch (err) {
+    console.error('[jobber/job-attach-report]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 module.exports = router;

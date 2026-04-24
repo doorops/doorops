@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inspection Report — DoorOps</title>
+  <style>
+    :root {
+      --green: #3d7a3a;
+      --green-dark: #2d5c2b;
+      --good: #2e7d32;
+      --good-bg: #e8f5e9;
+      --fair: #e65100;
+      --fair-bg: #fff3e0;
+      --poor: #c62828;
+      --poor-bg: #ffebee;
+      --na: #757575;
+      --na-bg: #f5f5f5;
+      --border: #e0e0e0;
+      --text: #212121;
+      --muted: #757575;
+      --bg: #fafafa;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .page-wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+
+    /* Sticky bar */
+    .pdf-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: none;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .btn-action {
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 18px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-action:hover { background: var(--green-dark); }
+    .btn-share {
+      background: #fff;
+      color: #333;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 16px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-share:hover { background: #f5f5f5; }
+
+    /* Header */
+    .report-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 3px solid var(--green);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-logo {
+      width: 56px; height: 56px;
+      border-radius: 8px; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--green);
+      color: #fff; font-size: 1.4rem; font-weight: 800;
+      flex-shrink: 0;
+    }
+    .brand-logo img { width: 100%; height: 100%; object-fit: contain; }
+    .brand-text h1 { font-size: 1.1rem; font-weight: 800; color: var(--green); letter-spacing: -0.3px; }
+    .brand-text p { font-size: 0.78rem; color: var(--muted); }
+    .report-date-block { text-align: right; font-size: 0.82rem; color: var(--muted); }
+    .report-date-block strong { display: block; font-size: 1rem; color: var(--text); font-weight: 700; }
+
+    /* Info grid */
+    .report-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 540px) { .report-info { grid-template-columns: 1fr; } }
+    .info-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .info-card .label {
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--muted); margin-bottom: 3px;
+    }
+    .info-card .value { font-size: 0.95rem; font-weight: 600; }
+
+    /* Stats */
+    .summary-stats { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+    .stat-box { flex: 1; min-width: 90px; border-radius: 8px; padding: 14px; text-align: center; }
+    .stat-box .stat-num { font-size: 2rem; font-weight: 800; line-height: 1; }
+    .stat-box .stat-lbl { font-size: 0.78rem; font-weight: 600; margin-top: 4px; }
+    .stat-box.extra { font-size: 0.8rem; background: #f0faf0; color: var(--good); }
+    .stat-good { background: var(--good-bg); color: var(--good); }
+    .stat-fair { background: var(--fair-bg); color: var(--fair); }
+    .stat-poor { background: var(--poor-bg); color: var(--poor); }
+
+    /* Section titles */
+    .section-title {
+      font-size: 0.78rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.8px; color: var(--muted); margin-bottom: 12px;
+      padding-bottom: 4px; border-bottom: 1px solid var(--border);
+    }
+
+    /* Door card */
+    .door-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .door-card-header {
+      background: #f5f5f5;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .door-card-title { font-weight: 700; font-size: 0.95rem; }
+    .door-card-meta { font-size: 0.78rem; color: var(--muted); }
+
+    /* Category groups */
+    .category-group { border-bottom: 1px solid var(--border); }
+    .category-group:last-child { border-bottom: none; }
+    .category-header {
+      padding: 8px 16px;
+      background: #fafafa;
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .finding-row {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 9px 16px; border-bottom: 1px solid #f0f0f0; font-size: 0.85rem;
+    }
+    .finding-row:last-child { border-bottom: none; }
+    .finding-label { flex: 1; color: var(--text); }
+    .finding-notes { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+    /* Badges */
+    .badge {
+      display: inline-block; padding: 2px 10px; border-radius: 12px;
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.4px; white-space: nowrap; flex-shrink: 0;
+    }
+    .badge-good, .badge-pass { background: var(--good-bg); color: var(--good); }
+    .badge-fair, .badge-needs_attention { background: var(--fair-bg); color: var(--fair); }
+    .badge-poor, .badge-fail { background: var(--poor-bg); color: var(--poor); }
+    .badge-na { background: var(--na-bg); color: var(--na); }
+
+    /* Deficiencies */
+    .deficiency-item {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .deficiency-item.sev-safety_critical { border-left-color: var(--poor); }
+    .deficiency-item.sev-moderate { border-left-color: var(--fair); }
+    .deficiency-item.sev-advisory { border-left-color: #1976d2; }
+    .deficiency-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 3px; }
+    .deficiency-meta { font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+    .deficiency-desc { font-size: 0.83rem; color: #444; }
+    .sev-badge {
+      display: inline-block; font-size: 0.7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.4px;
+      padding: 1px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle;
+    }
+    .sev-safety_critical { background: var(--poor-bg); color: var(--poor); }
+    .sev-moderate { background: var(--fair-bg); color: var(--fair); }
+    .sev-advisory { background: #e3f2fd; color: #1565c0; }
+
+    /* Loading / error */
+    .state-box { text-align: center; padding: 80px 24px; color: var(--muted); }
+    .state-box .icon { font-size: 3rem; margin-bottom: 12px; }
+    .state-box h2 { font-size: 1.2rem; color: var(--text); margin-bottom: 6px; }
+    .state-box p { font-size: 0.9rem; }
+
+    /* Footer */
+    .report-footer {
+      margin-top: 40px; padding-top: 16px;
+      border-top: 1px solid var(--border);
+      text-align: center; font-size: 0.78rem; color: var(--muted);
+    }
+
+    @media print {
+      body { background: #fff; font-size: 11pt; }
+      .pdf-bar { display: none !important; }
+      .page-wrap { max-width: 100%; padding: 0; }
+      .door-card { break-inside: avoid; page-break-inside: avoid; }
+      .deficiency-item { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="pdf-bar" id="pdf-bar">
+  <button class="btn-share" id="share-btn" onclick="copyShareLink()">📋 Copy Link</button>
+  <button class="btn-action" onclick="window.print()">🖨 Print / Save PDF</button>
+</div>
+
+<div class="page-wrap" id="app">
+  <div class="state-box" id="loading-state">
+    <div class="icon">🔍</div>
+    <h2>Loading report…</h2>
+    <p>Hang tight.</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  const token = location.pathname.split('/').pop();
+  if (!token) { showError('Invalid report link.'); return; }
+
+  fetch('/api/portal/inspection/' + token)
+    .then(r => {
+      if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Not found'); });
+      return r.json();
+    })
+    .then(renderReport)
+    .catch(err => showError(err.message));
+
+  function showError(msg) {
+    document.getElementById('app').innerHTML = `
+      <div class="state-box">
+        <div class="icon">🚫</div>
+        <h2>Report Not Available</h2>
+        <p>${escHtml(msg)}</p>
+      </div>`;
+  }
+
+  function renderReport({ inspection: insp, company, inspector_name, doors, deficiencies }) {
+    // Stats
+    let goodCount = 0, fairCount = 0, poorCount = 0, totalItems = 0;
+    doors.forEach(d => (d.findings || []).forEach(f => {
+      if (f.rating === 'na' || !f.rating) return;
+      totalItems++;
+      if (f.rating === 'good' || f.rating === 'pass') goodCount++;
+      else if (f.rating === 'fair' || f.rating === 'needs_attention') fairCount++;
+      else if (f.rating === 'poor' || f.rating === 'fail') poorCount++;
+    }));
+
+    const inspDate = insp.inspection_date
+      ? new Date(insp.inspection_date + 'T12:00:00').toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' })
+      : insp.completed_at
+        ? new Date(insp.completed_at).toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' })
+        : '—';
+
+    // Door cards HTML
+    const doorsHtml = doors.map(door => {
+      const byCategory = {};
+      (door.findings || []).forEach(f => {
+        const cat = f.category || 'General';
+        if (!byCategory[cat]) byCategory[cat] = [];
+        byCategory[cat].push(f);
+      });
+
+      const categoriesHtml = Object.entries(byCategory).map(([cat, findings]) => {
+        const rowsHtml = findings.map(f => {
+          const rating = f.rating || 'na';
+          const badgeText = { good:'Good', fair:'Fair', poor:'Poor', pass:'Pass', needs_attention:'Attn', fail:'Fail', na:'N/A' }[rating] || rating;
+          return `<div class="finding-row">
+            <div class="finding-label">
+              ${escHtml(f.item || f.template_label || 'Item')}
+              ${f.note ? `<div class="finding-notes">${escHtml(f.note)}</div>` : ''}
+            </div>
+            <span class="badge badge-${rating}">${badgeText}</span>
+          </div>`;
+        }).join('');
+        return `<div class="category-group">
+          <div class="category-header">${escHtml(cat)}</div>
+          ${rowsHtml}
+        </div>`;
+      }).join('');
+
+      const locLabel = door.location_label || door.location || ('Door ' + door.door_number);
+      const makeModel = [door.make, door.model].filter(Boolean).join(' ');
+      return `<div class="door-card">
+        <div class="door-card-header">
+          <div>
+            <div class="door-card-title">🚪 ${escHtml(locLabel)}</div>
+            <div class="door-card-meta">${escHtml(door.door_type || 'Door')}${makeModel ? ' · ' + escHtml(makeModel) : ''}${door.install_year ? ' · ' + door.install_year : ''}</div>
+          </div>
+          ${door.overall_condition ? `<span class="badge badge-${door.overall_condition}">${door.overall_condition}</span>` : ''}
+        </div>
+        <div>
+          ${categoriesHtml || '<div class="finding-row" style="color:var(--muted);">No checklist items.</div>'}
+        </div>
+      </div>`;
+    }).join('');
+
+    // Deficiencies HTML
+    const sevLabel = { safety_critical: 'Safety Critical', moderate: 'Moderate', advisory: 'Advisory' };
+    const defHtml = (deficiencies || []).length
+      ? deficiencies.map(d => {
+          const door = doors.find(dr => dr.id === d.door_id);
+          const doorLabel = door ? (door.location_label || door.location || ('Door ' + door.door_number)) : '—';
+          return `<div class="deficiency-item sev-${d.severity}">
+            <div class="deficiency-title">
+              ${escHtml(d.title || d.description || 'Issue')}
+              <span class="sev-badge sev-${d.severity}">${sevLabel[d.severity] || d.severity}</span>
+            </div>
+            <div class="deficiency-meta">🚪 ${escHtml(doorLabel)}</div>
+            ${d.description && d.title && d.description !== d.title
+              ? `<div class="deficiency-desc">${escHtml(d.description)}</div>` : ''}
+            ${d.recommendation ? `<div class="deficiency-desc" style="margin-top:4px;color:#1976d2;">💡 ${escHtml(d.recommendation)}</div>` : ''}
+          </div>`;
+        }).join('')
+      : '<p style="color:var(--muted);font-size:0.88rem;padding:8px 0;">No deficiencies found. ✅</p>';
+
+    const companyName = company?.name || 'DoorOps';
+    const logoUrl = company?.logo_url || null;
+
+    document.getElementById('app').innerHTML = `
+      <div class="report-header">
+        <div class="brand">
+          <div class="brand-logo">
+            ${logoUrl ? `<img src="${escHtml(logoUrl)}" alt="${escHtml(companyName)}" onerror="this.parentElement.textContent='🚪'">` : '🚪'}
+          </div>
+          <div class="brand-text">
+            <h1>${escHtml(companyName)}</h1>
+            <p>Garage Door Inspection Report</p>
+          </div>
+        </div>
+        <div class="report-date-block">
+          <strong>${escHtml(inspDate)}</strong>
+          ${inspector_name ? `Inspector: ${escHtml(inspector_name)}` : ''}
+        </div>
+      </div>
+
+      <div class="report-info">
+        <div class="info-card">
+          <div class="label">Contact</div>
+          <div class="value">${escHtml(insp.contact_name || '—')}</div>
+        </div>
+        <div class="info-card">
+          <div class="label">Property Address</div>
+          <div class="value">${escHtml(insp.property_address || '—')}</div>
+        </div>
+        ${insp.property_name ? `
+        <div class="info-card">
+          <div class="label">Property Name</div>
+          <div class="value">${escHtml(insp.property_name)}</div>
+        </div>` : ''}
+        ${insp.next_inspection_date ? `
+        <div class="info-card">
+          <div class="label">Next Inspection</div>
+          <div class="value">${new Date(insp.next_inspection_date + 'T12:00:00').toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' })}${insp.inspection_frequency ? ' (' + insp.inspection_frequency + ')' : ''}</div>
+        </div>` : ''}
+      </div>
+
+      <div class="summary-stats">
+        <div class="stat-box stat-good">
+          <div class="stat-num">${goodCount}</div>
+          <div class="stat-lbl">Good / Pass</div>
+        </div>
+        <div class="stat-box stat-fair">
+          <div class="stat-num">${fairCount}</div>
+          <div class="stat-lbl">Fair / Attn</div>
+        </div>
+        <div class="stat-box stat-poor">
+          <div class="stat-num">${poorCount}</div>
+          <div class="stat-lbl">Poor / Fail</div>
+        </div>
+        <div class="stat-box" style="background:#f0f4ff;color:#1565c0;">
+          <div class="stat-num">${doors.length}</div>
+          <div class="stat-lbl">Doors</div>
+        </div>
+      </div>
+
+      ${deficiencies && deficiencies.length > 0 ? `
+      <div class="section-title">Deficiencies (${deficiencies.length})</div>
+      <div style="margin-bottom:28px;">${defHtml}</div>
+      ` : ''}
+
+      <div class="section-title">Doors Inspected (${doors.length})</div>
+      ${doorsHtml || '<p style="color:var(--muted);">No doors found.</p>'}
+
+      <div class="report-footer">
+        Report generated by <strong>DoorOps</strong> · app.doorops.app
+        ${company?.name ? ` &nbsp;·&nbsp; ${escHtml(company.name)}` : ''}
+      </div>`;
+
+    document.getElementById('pdf-bar').style.display = 'flex';
+    document.title = `Inspection Report — ${insp.contact_name || companyName} — ${inspDate}`;
+  }
+
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+})();
+
+function copyShareLink() {
+  const url = location.href;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('share-btn');
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✅ Copied!';
+      setTimeout(() => { btn.innerHTML = orig; }, 2000);
+    }
+  }).catch(() => { prompt('Copy this link:', url); });
+}
+</script>
+</body>
+</html>

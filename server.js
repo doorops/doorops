@@ -31,6 +31,8 @@ app.get('*', (req, res) => {
   if (req.path === '/terms') return res.sendFile(path.join(__dirname, 'public', 'terms.html'));
   // Client portal — serve portal.html for /portal/:token
   if (req.path.startsWith('/portal/')) return res.sendFile(path.join(__dirname, 'public', 'portal.html'));
+  // Shareable report — serve report.html for /report/:token
+  if (req.path.startsWith('/report/')) return res.sendFile(path.join(__dirname, 'public', 'report.html'));
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

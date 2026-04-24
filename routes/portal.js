@@ -12,7 +12,7 @@ async function getPublishedInspection(token) {
      FROM inspections i
      LEFT JOIN companies c ON i.company_id = c.id
      LEFT JOIN users u ON i.inspector_id = u.id
-     WHERE i.portal_token = $1 AND i.status IN ('published', 'sent')`,
+     WHERE i.portal_token = $1 AND i.status IN ('published', 'sent', 'complete')`,
     [token]
   );
   return result.rows[0] || null;
@@ -136,11 +136,13 @@ router.get('/inspection/:token', async (req, res) => {
         property_name: insp.property_name,
         property_address: insp.property_address,
         contact_name: insp.contact_name,
+        contact_email: insp.contact_email,
         inspection_date: insp.inspection_date,
         next_inspection_date: insp.next_inspection_date,
         inspection_frequency: insp.inspection_frequency,
         status: insp.status,
         published_at: insp.published_at,
+        completed_at: insp.completed_at,
         notes: insp.notes
       },
       company: {

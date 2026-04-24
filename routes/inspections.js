@@ -349,6 +349,33 @@ router.delete('/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ─── REPORT LINK ────────────────────────────────────────────────────────────────
+router.post('/:id/report-link', requireAuth, async (req, res) => {
+  try {
+    const insp = await db.query('SELECT * FROM inspections WHERE id = $1 AND company_id = $2', [req.params.id, req.companyId]);
+    if (!insp.rows.length) return res.status(404).json({ error: 'Not found' });
+
+    let token = insp.rows[0].portal_token;
+    if (!token) {
+      token = crypto.randomBytes(32).toString('hex');
+      let attempts = 0;
+      while (attempts < 5) {
+        const conflict = await db.query('SELECT id FROM inspections WHERE portal_token = $1', [token]);
+        if (!conflict.rows.length) break;
+        token = crypto.randomBytes(32).toString('hex');
+        attempts++;
+      }
+      await db.query('UPDATE inspections SET portal_token = $1, updated_at = NOW() WHERE id = $2', [token, req.params.id]);
+    }
+
+    const appUrl = process.env.APP_URL || 'https://app.doorops.app';
+    res.json({ url: `${appUrl}/report/${token}` });
+  } catch (err) {
+    console.error('[inspections/report-link]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ─── SEND REPORT ──────────────────────────────────────────────────────────────
 router.post('/:id/send-report', requireAuth, async (req, res) => {
   try {
