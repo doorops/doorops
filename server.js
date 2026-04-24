@@ -25,6 +25,7 @@ app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
   // Named HTML pages
   if (req.path === '/privacy') return res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+  if (req.path === '/terms') return res.sendFile(path.join(__dirname, 'public', 'terms.html'));
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
