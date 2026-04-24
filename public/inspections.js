@@ -131,7 +131,7 @@ function showNewInspectionForm() {
         <textarea id="ni-notes" placeholder="Optional notes…" style="width:100%;min-height:80px;"></textarea>
       </div>
       <div id="ni-error" style="display:none;background:rgba(239,68,68,0.15);border:1px solid var(--danger);border-radius:6px;padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:12px;"></div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;padding-bottom:80px;">
         <button class="btn-primary-do" onclick="submitNewInspection()" style="flex:1;">Create Inspection</button>
         <button onclick="loadInspections()" style="flex:1;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;">Cancel</button>
       </div>
@@ -409,7 +409,7 @@ function showAddDoorForm(prefill) {
         <textarea id="ad-notes" placeholder="Observations, notes…" style="width:100%;min-height:72px;"></textarea>
       </div>
 
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;padding-bottom:80px;">
         <button class="btn-primary-do" onclick="submitAddDoor()" style="flex:1;">Save Door</button>
         <button onclick="renderInspectionDetail()" style="flex:1;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;">Cancel</button>
       </div>
@@ -576,7 +576,7 @@ function showAddDeficiencyForm(doorId) {
           </label>
         </div>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;padding-bottom:80px;">
         <button class="btn-primary-do" onclick="submitAddDeficiency(${doorId || 'null'})" style="flex:1;">Save Deficiency</button>
         <button onclick="${doorId ? 'openDoorDetail(' + doorId + ')' : 'renderInspectionDetail()'}" style="flex:1;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;">Cancel</button>
       </div>

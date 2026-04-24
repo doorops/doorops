@@ -647,3 +647,25 @@ button, .btn-primary-do, input[type="submit"], select {
 span[style*="border-radius:20px"] {
   transition: background 0.2s, color 0.2s;
 }
+
+/* ── BOTTOM NAV CLEARANCE ───────────────────────────────── */
+/* Ensure form buttons and modal footers clear the bottom nav on mobile */
+@media (max-width: 768px) {
+  .modal-footer,
+  .form-actions,
+  .page-actions {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+
+  /* Extra scroll room on any page so last element isn't hidden */
+  .page {
+    padding-bottom: 80px;
+  }
+
+  /* If buttons are at bottom of a scrollable form, add margin */
+  form .btn:last-child,
+  form button[type="submit"]:last-child,
+  .form-group:last-child {
+    margin-bottom: 80px;
+  }
+}
