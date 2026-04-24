@@ -74,8 +74,25 @@ async function jobberQuery(companyId, query, variables = {}) {
 }
 
 // ─── OAuth: Start ─────────────────────────────────────────────────────────────
-router.get('/connect', requireAuth, (req, res) => {
-  const state = Buffer.from(JSON.stringify({ companyId: req.companyId, userId: req.user.id })).toString('base64');
+router.get('/connect', async (req, res) => {
+  // Read JWT from cookie directly (can't use requireAuth middleware on browser nav)
+  const jwt = require('jsonwebtoken');
+  const token = req.cookies?.token;
+  if (!token) return res.send('<p>Not logged in. Please log in to DoorOps first, then try connecting Jobber again.</p>');
+
+  let companyId, userId;
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    userId = decoded.userId;
+    // Get companyId from DB
+    const result = await db.query('SELECT company_id FROM users WHERE id = $1', [decoded.userId]);
+    if (!result.rows.length) return res.send('<p>User not found.</p>');
+    companyId = result.rows[0].company_id;
+  } catch(e) {
+    return res.send('<p>Session expired. Please log in again.</p>');
+  }
+
+  const state = Buffer.from(JSON.stringify({ companyId, userId })).toString('base64');
   const url = `https://api.getjobber.com/api/oauth/authorize?` +
     `client_id=${JOBBER_CLIENT_ID}&` +
     `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
@@ -118,8 +135,13 @@ router.get('/callback', async (req, res) => {
       }
     <\/script><p>Jobber connected! You can close this window.</p></body></html>`);
   } catch (err) {
-    console.error('[jobber/callback]', err.response?.data || err.message);
-    res.send(`<!DOCTYPE html><html><body><script>if(window.opener){window.opener.postMessage({jobber:'error'},'${APP_URL}');window.close();}else{window.location='/#settings';}<\/script><p>Connection failed. Close this window and try again.</p></body></html>`);
+    const errMsg = JSON.stringify(err.response?.data || err.message);
+    console.error('[jobber/callback]', errMsg);
+    res.send(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:24px;background:#111;color:#fff;">
+      <h3 style="color:#ef4444;">Jobber Connection Failed</h3>
+      <p style="color:#9ca3af;font-size:13px;">${errMsg}</p>
+      <script>if(window.opener){window.opener.postMessage({jobber:'error'},'${APP_URL}');setTimeout(()=>window.close(),3000);}<\/script>
+    </body></html>`);
   }
 });
 
