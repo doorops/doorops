@@ -8,6 +8,7 @@
   "theme_color": "#3d7a3a",
   "version": "2",
   "orientation": "any",
+  "id": "app.doorops.app",
   "icons": [
     {
       "src": "/icon-192.png",
