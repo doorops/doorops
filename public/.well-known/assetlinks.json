@@ -2,7 +2,7 @@
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "app.doorops.app.twa",
-    "sha256_cert_fingerprints": ["8A:83:21:1E:CD:FC:13:22:C4:BC:D8:A8:F6:32:88:5C:C7:04:7A:85:FD:FF:7D:C6:5F:FD:C1:C2:85:B4:51:F3"]
+    "package_name": "app.doorops.app",
+    "sha256_cert_fingerprints": ["C5:70:A3:1D:7D:F1:8C:ED:D4:1F:F2:7B:60:C2:43:50:AF:DE:C3:75:C2:B8:AA:93:8C:05:8B:C0:51:CF:9C:CB"]
   }
 }]
