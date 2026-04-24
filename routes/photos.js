@@ -36,14 +36,14 @@ router.post('/', requireAuth, upload.single('photo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const { inspection_id, door_id, deficiency_id, caption } = req.body;
+    const { inspection_id, door_id, deficiency_id, checklist_item_id, caption } = req.body;
     const url = `/uploads/${req.companyId}/${req.file.filename}`;
 
     const result = await db.query(
-      `INSERT INTO inspection_photos (company_id, inspection_id, door_id, deficiency_id, url, filename, caption, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO inspection_photos (company_id, inspection_id, door_id, deficiency_id, checklist_item_id, url, filename, caption, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [req.companyId, inspection_id || null, door_id || null, deficiency_id || null,
-       url, req.file.filename, caption || null, req.user.id]
+       checklist_item_id || null, url, req.file.filename, caption || null, req.user.id]
     );
 
     res.status(201).json(result.rows[0]);

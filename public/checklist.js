@@ -1,245 +1,676 @@
 // ============================================================
-// DoorOps — Checklist & Photo Module
+// DoorOps — Checklist Module (AccessGuard-style)
+// Shared state: _currentInspection (set by inspections.js)
 // ============================================================
 
-let _checklistItems = [];   // current door's checklist items
-let _checklistDoor = null;  // door object we're checking
+let _currentDoorId = null;
+let _findingsFilter = 'all'; // 'all' | 'issues'
+let _syncTimers = {};        // findingId → setTimeout handle
 
-// ─── Open Checklist for a door ────────────────────────────────────────────────
-async function openChecklist(doorId) {
-  const door = (_currentInspection.doors || []).find(d => d.id === doorId);
-  if (!door) return;
-  _checklistDoor = door;
+// ─── Door-type helpers ────────────────────────────────────────────────────────
 
-  const page = document.getElementById('page-inspections');
-  page.innerHTML = '<div style="color:var(--muted);padding:32px;">Loading checklist…</div>';
-
-  // Load existing responses
-  const saved = await fetch('/api/checklists/door/' + doorId, { credentials: 'include' }).then(r => r.json()).catch(() => []);
-  // Load template for this door type
-  const template = await fetch('/api/checklists/template/' + (door.door_type || 'other'), { credentials: 'include' }).then(r => r.json()).catch(() => []);
-
-  // Merge: use saved items if exist, otherwise use template
-  if (saved.length > 0) {
-    _checklistItems = saved;
-  } else {
-    _checklistItems = template.map((t, idx) => ({ ...t, result: null, note: '', sort_order: idx }));
-  }
-
-  renderChecklist();
+function getDoorTypeLabel(dt) {
+  const map = {
+    sectional:    'Sectional Door',
+    rolling_steel:'Rolling Steel',
+    high_speed:   'High Speed Door',
+    fire_door:    'Fire Door',
+    dock_leveler: 'Dock Leveler',
+    other:        'Other'
+  };
+  return map[dt] || (dt || '').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 }
 
-function renderChecklist() {
-  const door = _checklistDoor;
-  const page = document.getElementById('page-inspections');
+function isCommercialDoorType(dt) {
+  return ['rolling_steel','high_speed','fire_door','dock_leveler'].includes(dt);
+}
 
-  const passCount = _checklistItems.filter(i => i.result === 'pass').length;
-  const failCount = _checklistItems.filter(i => i.result === 'fail').length;
-  const naCount = _checklistItems.filter(i => i.result === 'na').length;
-  const total = _checklistItems.length;
-  const done = passCount + failCount + naCount;
-  const pct = total ? Math.round((done / total) * 100) : 0;
+function getRatingButtons(doorType) {
+  if (isCommercialDoorType(doorType)) {
+    return [
+      { key: 'pass',            label: 'Pass' },
+      { key: 'needs_attention', label: 'Needs Attn' },
+      { key: 'fail',            label: 'Fail' }
+    ];
+  }
+  return [
+    { key: 'good', label: 'Good' },
+    { key: 'fair', label: 'Fair' },
+    { key: 'poor', label: 'Poor' }
+  ];
+}
 
-  // Group by category
-  const categories = {};
-  _checklistItems.forEach((item, idx) => {
-    if (!categories[item.category]) categories[item.category] = [];
-    categories[item.category].push({ ...item, _idx: idx });
+function isIssueRating(rating) {
+  return ['fair','poor','needs_attention','fail'].includes(rating);
+}
+
+function getRatingClass(rating) {
+  if (!rating || rating === 'na') return '';
+  return 'rating-' + rating;
+}
+
+function calcDoorProgress(door) {
+  const findings = door.findings || [];
+  let total = 0, done = 0, issues = 0, worstRating = null;
+  const ratingOrder = ['good','pass','fair','needs_attention','poor','fail'];
+
+  findings.forEach(f => {
+    if (f.rating !== 'na') total++;
+    if (f.rating && f.rating !== 'na') {
+      done++;
+      const idx = ratingOrder.indexOf(f.rating);
+      const wi  = worstRating ? ratingOrder.indexOf(worstRating) : -1;
+      if (idx > wi) worstRating = f.rating;
+    }
+    if (isIssueRating(f.rating)) issues++;
   });
+
+  let statusClass = 'door-status-not-started';
+  let statusLabel = 'NOT STARTED';
+  if (done > 0 && done < total)    { statusClass = 'door-status-in-progress'; statusLabel = 'IN PROGRESS'; }
+  else if (done > 0 && done >= total && total > 0) { statusClass = 'door-status-complete';    statusLabel = 'COMPLETE'; }
+
+  let colorClass = '';
+  if (worstRating === 'poor' || worstRating === 'fail')             colorClass = 'worst-poor';
+  else if (worstRating === 'fair' || worstRating === 'needs_attention') colorClass = 'worst-fair';
+  else if (worstRating === 'good' || worstRating === 'pass')        colorClass = 'worst-good';
+
+  return { total, done, issues, statusClass, statusLabel, colorClass };
+}
+
+function calcInspectionProgress(insp) {
+  let total = 0, done = 0, issues = 0;
+  (insp.doors || []).forEach(d => {
+    (d.findings || []).forEach(f => {
+      if (f.rating !== 'na') total++;
+      if (f.rating && f.rating !== 'na') done++;
+      if (isIssueRating(f.rating)) issues++;
+    });
+  });
+  return { total, done, issues };
+}
+
+function getDoorConfigSummary(door) {
+  const parts = [];
+  if (door.door_width_ft && door.door_height_ft) parts.push(door.door_width_ft + "' × " + door.door_height_ft + "'");
+  if (door.make)        parts.push(door.make);
+  if (door.model)       parts.push(door.model);
+  if (door.opener_make) parts.push(door.opener_make + (door.opener_hp ? ' ' + door.opener_hp + 'hp' : ''));
+  return parts.join(' · ');
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+
+function openDoor(doorId) {
+  _currentDoorId = doorId;
+  _findingsFilter = 'all';
+  renderDoorChecklist();
+}
+
+// ─── Catalogue (simple hardcoded list for deficiency autocomplete) ─────────────
+
+const CATALOGUE_ITEMS = [
+  'Replace torsion spring','Replace extension spring','Replace spring',
+  'Lubricate hinges and rollers','Replace bottom weather seal',
+  'Replace side weather seal','Replace top weather seal',
+  'Replace panel','Repair panel dent','Replace all panels',
+  'Replace rollers','Replace hinges','Tighten loose hardware',
+  'Align tracks','Straighten bent track','Replace track section',
+  'Replace cables','Re-seat cables on drums','Replace cable drums',
+  'Service/adjust opener','Replace opener','Replace safety reversal',
+  'Adjust photo eye sensors','Replace photo eye sensors',
+  'Replace belt/chain/screw drive','Replace opener motor',
+  'Replace fusible link','Replace UL label','Test gravity close',
+  'Replace dock leveler lip','Service dock leveler hydraulics',
+  'Replace hydraulic fluid','Replace dock leveler seals',
+  'Replace curtain slats','Replace bottom bar','Replace end locks',
+  'Realign curtain guides','Replace curtain material',
+  'Balance door (spring adjustment)','Add/replace safety label',
+  'Replace emergency release cord'
+];
+
+function searchCatalogue(value, findingId) {
+  const el = document.getElementById('cat-suggest-' + findingId);
+  if (!el) return;
+  if (!value || value.length < 2) { el.innerHTML = ''; return; }
+  const q = value.toLowerCase();
+  const matches = CATALOGUE_ITEMS.filter(i => i.toLowerCase().includes(q)).slice(0, 5);
+  el.innerHTML = matches.map(m =>
+    `<span class="catalogue-pill" onclick="applyCatSuggestion(${findingId},'${escHtml(m)}')">${m}</span>`
+  ).join('');
+}
+
+function applyCatSuggestion(findingId, value) {
+  const input = document.querySelector(`#finding-${findingId} .deficiency-title-input`);
+  if (input) {
+    input.value = value;
+    document.getElementById('cat-suggest-' + findingId).innerHTML = '';
+    saveDeficiencyTitle(findingId, value);
+  }
+}
+
+// ─── Render Door Checklist ────────────────────────────────────────────────────
+
+function renderDoorChecklist() {
+  const page = document.getElementById('page-inspections');
+  if (!page || !_currentInspection) return;
+
+  const insp = _currentInspection;
+  const door = (insp.doors || []).find(d => d.id === _currentDoorId);
+  if (!door) { page.innerHTML = '<div class="insp-empty-state">Door not found</div>'; return; }
+
+  const findings   = door.findings || [];
+  const ratingBtns = getRatingButtons(door.door_type);
+  const dp         = calcDoorProgress(door);
+  const doors      = insp.doors || [];
+
+  // Tab strip — shown when >1 door
+  const tabStrip = doors.length > 1
+    ? `<div class="door-tab-strip">
+        ${doors.map(d => `<button class="door-tab${d.id === door.id ? ' active' : ''}" onclick="openDoor(${d.id})">${escHtml(d.location_label || d.location || 'Door ' + d.door_number)}</button>`).join('')}
+       </div>`
+    : '';
+
+  // Group findings by category
+  const categories = {};
+  findings.forEach(f => {
+    const cat = f.template_category || f.category || 'General';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(f);
+  });
+
+  const categoryBlocks = Object.entries(categories).map(([catName, catFindings]) => {
+    const catDone   = catFindings.filter(f => f.rating && f.rating !== 'na').length;
+    const catIssues = catFindings.filter(f => isIssueRating(f.rating)).length;
+    const findingRows = catFindings.map(f => renderFindingRow(f, door.door_type, ratingBtns)).join('');
+    return `
+      <div class="checklist-category" data-category="${escHtml(catName)}">
+        <div class="category-header" onclick="toggleCategory(this)">
+          <span class="category-name">${escHtml(catName)}</span>
+          <span class="category-progress">${catDone}/${catFindings.length}</span>
+          ${catIssues > 0 ? `<span class="door-issue-badge" style="margin-left:6px;">${catIssues}</span>` : ''}
+          <span class="chevron" style="margin-left:8px;color:var(--muted);">▼</span>
+        </div>
+        <div class="category-items">${findingRows}</div>
+      </div>`;
+  }).join('');
+
+  const configSummary = getDoorConfigSummary(door);
 
   page.innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-      <button onclick="openDoorDetail(${door.id})" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">←</button>
-      <div style="flex:1;">
-        <h1 style="margin:0;font-size:18px;">Checklist — Door ${door.door_number}${door.location ? ' · ' + escDO(door.location) : ''}</h1>
-        <div style="font-size:12px;color:var(--muted);">${(door.door_type||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</div>
+    <div class="insp-door-header">
+      <button onclick="renderInspectionOverview()" class="back-btn">← Back</button>
+      <div class="door-title" style="flex:1;min-width:0;">
+        <span style="font-weight:700;">${escHtml(door.location_label || door.location || 'Door ' + door.door_number)}</span>
+        <span class="door-type-label">${getDoorTypeLabel(door.door_type)}</span>
+        ${configSummary ? `<div style="font-size:0.75rem;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(configSummary)}</div>` : ''}
       </div>
-      <button class="btn-primary-do" onclick="saveChecklist(${door.id})" style="padding:8px 14px;font-size:13px;">Save</button>
+      <div class="door-progress">${dp.done}/${dp.total}</div>
     </div>
-
-    <!-- Progress bar -->
-    <div style="background:var(--surface);border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px;">
-      <div style="flex:1;">
-        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
-          <div style="height:100%;width:${pct}%;background:var(--orange);border-radius:3px;transition:width 0.3s;"></div>
-        </div>
-      </div>
-      <div style="font-size:12px;color:var(--muted);white-space:nowrap;">${done}/${total} · ${pct}%</div>
-      <div style="display:flex;gap:8px;font-size:11px;">
-        <span style="color:#22c55e;">✓ ${passCount}</span>
-        <span style="color:#ef4444;">✗ ${failCount}</span>
-        <span style="color:#6b7280;">— ${naCount}</span>
-      </div>
+    ${tabStrip}
+    <div class="issues-toggle">
+      <button id="toggle-all"    class="${_findingsFilter === 'all'    ? 'active' : ''}" onclick="setFindingsFilter('all')">All items</button>
+      <button id="toggle-issues" class="${_findingsFilter === 'issues' ? 'active' : ''}" onclick="setFindingsFilter('issues')">Issues only</button>
     </div>
-
     <div id="checklist-body">
-      ${Object.entries(categories).map(([cat, items]) => `
-        <div style="margin-bottom:16px;">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--orange);margin-bottom:8px;padding-left:4px;">${escDO(cat)}</div>
-          ${items.map(item => renderChecklistItem(item)).join('')}
-        </div>
-      `).join('')}
+      ${categoryBlocks || '<div class="insp-empty-state">No checklist items for this door.</div>'}
     </div>
+    <div class="door-complete-bar">
+      <button class="btn-door-complete" onclick="completeDoor(${door.id})">✅ Complete</button>
+    </div>`;
 
-    <div style="margin-top:20px;display:flex;gap:8px;">
-      <button class="btn-primary-do" onclick="saveChecklist(${door.id})" style="flex:1;">Save Checklist</button>
-      <button onclick="saveAndGenerateDeficiencies(${door.id})" style="flex:1;padding:10px;background:#ef444422;border:1px solid #ef444444;border-radius:8px;color:#ef4444;font-size:13px;font-weight:600;cursor:pointer;">⚠️ Save & Flag Failures</button>
-    </div>
-  `;
-}
-
-function renderChecklistItem(item) {
-  const idx = item._idx;
-  const res = item.result;
-  const critTag = item.critical ? '<span style="font-size:9px;color:#ef4444;font-weight:700;margin-left:4px;">CRITICAL</span>' : '';
-
-  const btnStyle = (val, activeColor, activeBg) => res === val
-    ? `background:${activeBg};border:2px solid ${activeColor};color:${activeColor};font-weight:700;`
-    : `background:transparent;border:1px solid var(--border);color:var(--muted);`;
-
-  return `
-    <div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:6px;${item.critical && res === 'fail' ? 'border:1px solid #ef4444;' : ''}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
-        <div style="font-size:13px;flex:1;">${escDO(item.item)}${critTag}</div>
-        <div style="display:flex;gap:4px;flex-shrink:0;">
-          <button onclick="setChecklistResult(${idx},'pass')" style="padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;${btnStyle('pass','var(--green)','#22c55e22')}">✓ Pass</button>
-          <button onclick="setChecklistResult(${idx},'fail')" style="padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;${btnStyle('fail','#ef4444','#ef444422')}">✗ Fail</button>
-          <button onclick="setChecklistResult(${idx},'na')" style="padding:4px 8px;border-radius:5px;font-size:11px;cursor:pointer;${btnStyle('na','#6b7280','#6b728022')}">N/A</button>
-        </div>
-      </div>
-      ${(res === 'fail' || item.note) ? `
-        <input type="text" placeholder="Note (required for failures)…" value="${escDO(item.note || '')}"
-          oninput="setChecklistNote(${idx}, this.value)"
-          style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;">
-      ` : ''}
-    </div>
-  `;
-}
-
-function setChecklistResult(idx, val) {
-  _checklistItems[idx].result = val;
-  renderChecklist();
-}
-
-function setChecklistNote(idx, val) {
-  _checklistItems[idx].note = val;
-}
-
-async function saveChecklist(doorId) {
-  const resp = await fetch('/api/checklists/door/' + doorId, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items: _checklistItems })
+  // Auto-expand categories with issues
+  document.querySelectorAll('.checklist-category').forEach(catEl => {
+    if (catEl.querySelector('.door-issue-badge')) {
+      const items   = catEl.querySelector('.category-items');
+      const chevron = catEl.querySelector('.chevron');
+      if (items)   items.classList.remove('collapsed');
+      if (chevron) chevron.textContent = '▼';
+    }
   });
-  if (!resp.ok) { alert('Failed to save checklist.'); return; }
-  _checklistItems = await resp.json();
-  renderChecklist();
-  showToast('Checklist saved ✓');
+
+  if (_findingsFilter === 'issues') setFindingsFilter('issues');
 }
 
-async function saveAndGenerateDeficiencies(doorId) {
-  await saveChecklist(doorId);
+// ─── Render single finding row ────────────────────────────────────────────────
 
-  const failures = _checklistItems.filter(i => i.result === 'fail');
-  if (!failures.length) { alert('No failures to flag.'); return; }
+function renderFindingRow(f, doorType, ratingBtns) {
+  const isIssue    = isIssueRating(f.rating);
+  const hasIssue   = isIssue ? ' has-issue' : '';
+  const ratedClass = (f.rating && f.rating !== '') ? ' finding-rated' : '';
+  const ratingClass = getRatingClass(f.rating);
+  const hasNotes   = (f.notes && f.notes.trim()) ? ' has-notes' : '';
 
-  let added = 0;
-  for (const item of failures) {
-    const resp = await fetch('/api/inspections/' + _currentInspection.id + '/deficiencies', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        door_id: doorId,
-        severity: item.critical ? 'safety_critical' : 'advisory',
-        description: item.item + (item.note ? ' — ' + item.note : ''),
-        include_in_quote: item.critical
-      })
-    });
-    if (resp.ok) added++;
-  }
+  const ratingBtnsHtml = ratingBtns.map(rb =>
+    `<button class="rating-btn ${rb.key}${f.rating === rb.key ? ' active' : ''}"
+             onclick="setRating(${f.id},'${rb.key}')">${rb.label}</button>`
+  ).join('');
 
-  // Reload inspection
-  const updated = await fetch('/api/inspections/' + _currentInspection.id, { credentials: 'include' });
-  _currentInspection = await updated.json();
+  const naActive = f.rating === 'na' ? ' active' : '';
 
-  showToast(`${added} deficiencie${added !== 1 ? 's' : 'y'} added ✓`);
-  openDoorDetail(doorId);
-}
+  const photoCount = (f.photos || []).length;
+  const photosHtml = photoCount > 0
+    ? `<img src="${f.photos[0].url}" style="width:22px;height:22px;object-fit:cover;border-radius:3px;" onerror="this.style.display='none'">${photoCount > 1 ? `<sup style="font-size:0.65rem;margin-left:1px;">+${photoCount-1}</sup>` : ''}`
+    : '📷';
 
-// ─── PHOTOS ───────────────────────────────────────────────────────────────────
-let _doorPhotos = [];
+  const defBody = buildDeficiencyForm(f);
 
-async function loadDoorPhotos(doorId) {
-  const resp = await fetch('/api/photos/door/' + doorId, { credentials: 'include' });
-  _doorPhotos = resp.ok ? await resp.json() : [];
-  return _doorPhotos;
-}
-
-function renderPhotoSection(doorId) {
-  const photos = _doorPhotos;
   return `
-    <div style="margin-bottom:20px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Photos (${photos.length})</div>
-        <label style="padding:6px 12px;background:var(--orange);border-radius:6px;color:#000;font-size:12px;font-weight:700;cursor:pointer;">
-          📷 Add Photo
-          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="uploadDoorPhoto(event, ${doorId})">
+    <div class="finding-row${ratedClass}${hasIssue} ${ratingClass}"
+         data-finding-id="${f.id}" id="finding-${f.id}" data-rating="${f.rating || ''}">
+      <div class="finding-label">
+        ${escHtml(f.template_label || f.item || f.label || 'Item')}
+        ${f.critical ? '<span class="photo-required-badge" title="Safety critical">⚠</span>' : ''}
+      </div>
+      <div class="finding-controls">
+        <div class="rating-buttons">${ratingBtnsHtml}</div>
+        <button class="na-btn${naActive}" onclick="setRating(${f.id},'na')">N/A</button>
+        <button class="notes-btn${hasNotes}" id="notes-btn-${f.id}" onclick="toggleNotes(${f.id})">📝</button>
+        <button class="photo-btn" onclick="handlePhotoBtn(${f.id})">${photosHtml}</button>
+      </div>
+      <div class="finding-notes-area" id="notes-${f.id}" style="display:none;">
+        <textarea placeholder="Add note…"
+                  onblur="saveNote(${f.id},this.value)">${escHtml(f.notes || '')}</textarea>
+      </div>
+      <div class="finding-deficiency-area" id="deficiency-${f.id}" style="display:${isIssue ? '' : 'none'};">
+        ${defBody}
+      </div>
+      <input type="file" id="photo-input-${f.id}" accept="image/*" multiple style="display:none;"
+             onchange="handlePhotoUpload(${f.id},this)">
+      <div class="finding-photo-strip" id="photo-strip-${f.id}">
+        ${renderPhotoStrip(f.id, f.photos || [])}
+      </div>
+    </div>`;
+}
+
+function buildDeficiencyForm(f) {
+  const def = f.deficiency;
+  return `
+    <div class="deficiency-capture">
+      <div class="deficiency-header">⚠ Deficiency</div>
+      <input type="text" placeholder="What needs to be done? (e.g. Replace torsion spring)"
+             class="deficiency-title-input"
+             value="${def ? escAttr(def.title || def.description || '') : ''}"
+             oninput="searchCatalogue(this.value,${f.id})"
+             onblur="saveDeficiencyTitle(${f.id},this.value)">
+      <div class="catalogue-suggestions" id="cat-suggest-${f.id}"></div>
+      <textarea placeholder="Notes / details (condition, measurements, urgency…)"
+                class="deficiency-notes-input"
+                onblur="saveDeficiencyDesc(${f.id},this.value)">${def ? escHtml(def.description || '') : ''}</textarea>
+      <div class="deficiency-fields">
+        <select class="severity-select" onchange="saveDeficiencySeverity(${f.id},this.value)">
+          <option value="advisory"${(!def || def.severity==='advisory') ? ' selected' : ''}>Advisory</option>
+          <option value="moderate"${def && def.severity==='moderate' ? ' selected' : ''}>Moderate</option>
+          <option value="safety_critical"${def && def.severity==='safety_critical' ? ' selected' : ''}>⚠ Safety Critical</option>
+        </select>
+        <label style="font-size:0.85rem;display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" ${!def || def.include_in_quote !== false ? 'checked' : ''}
+                 onchange="saveDeficiencyQuote(${f.id},this.checked)"> Include in quote
         </label>
       </div>
-      ${photos.length ? `
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
-          ${photos.map(p => `
-            <div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface);">
-              <img src="${p.url}" style="width:100%;height:100%;object-fit:cover;" onclick="viewPhoto('${p.url}')">
-              <button onclick="deletePhoto(${p.id}, ${doorId})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:22px;height:22px;color:#fff;font-size:13px;cursor:pointer;line-height:22px;text-align:center;">×</button>
-              ${p.caption ? `<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);padding:3px 6px;font-size:10px;color:#fff;">${escDO(p.caption)}</div>` : ''}
-            </div>
-          `).join('')}
-        </div>
-      ` : '<div style="color:var(--muted);font-size:13px;">No photos yet. Tap "Add Photo" to capture.</div>'}
-    </div>
-  `;
+    </div>`;
 }
 
-async function uploadDoorPhoto(event, doorId) {
-  const file = event.target.files[0];
-  if (!file) return;
+function renderPhotoStrip(findingId, photos) {
+  if (!photos || !photos.length) return '';
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:6px 0 2px;">
+    ${photos.map(p => `
+      <div style="position:relative;flex-shrink:0;">
+        <img src="${p.url}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;"
+             onclick="openPhotoLightbox('${p.url}')"
+             onerror="this.parentElement.style.display='none'">
+        <button onclick="deletePhoto(${p.id},${findingId})"
+                style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:18px;height:18px;color:#fff;font-size:10px;cursor:pointer;line-height:18px;text-align:center;">×</button>
+      </div>`).join('')}
+  </div>`;
+}
 
-  const caption = prompt('Caption (optional):') || '';
-  const formData = new FormData();
-  formData.append('photo', file);
-  formData.append('inspection_id', _currentInspection.id);
-  formData.append('door_id', doorId);
-  if (caption) formData.append('caption', caption);
+// ─── Optimistic Rating Update ─────────────────────────────────────────────────
 
-  showToast('Uploading…');
+function setRating(findingId, rating) {
+  if (!_currentInspection) return;
 
-  const resp = await fetch('/api/photos', {
-    method: 'POST',
-    credentials: 'include',
-    body: formData
+  let targetFinding = null, targetDoor = null;
+  for (const door of (_currentInspection.doors || [])) {
+    const f = (door.findings || []).find(f => f.id === findingId);
+    if (f) { targetFinding = f; targetDoor = door; break; }
+  }
+  if (!targetFinding) return;
+
+  targetFinding.rating = rating;
+
+  // localStorage for resilience
+  try {
+    localStorage.setItem('do_finding_' + findingId, JSON.stringify({ rating, notes: targetFinding.notes || '' }));
+  } catch(e) {}
+
+  // Queue background sync
+  queueSync(findingId, { rating, note: targetFinding.notes || '' });
+
+  // --- Optimistic DOM update ---
+  const row = document.getElementById('finding-' + findingId);
+  if (row) {
+    // Clear rating classes
+    row.classList.remove('finding-rated','has-issue',
+      'rating-good','rating-fair','rating-poor',
+      'rating-pass','rating-needs_attention','rating-fail','rating-na');
+    row.dataset.rating = rating;
+
+    if (rating)                   row.classList.add('finding-rated');
+    if (isIssueRating(rating))    row.classList.add('has-issue', 'rating-' + rating);
+    else if (rating && rating !== 'na') row.classList.add('rating-' + rating);
+
+    // Update buttons
+    row.querySelectorAll('.rating-btn').forEach(btn => {
+      const btnKey = Array.from(btn.classList).find(c =>
+        ['good','fair','poor','pass','needs_attention','fail'].includes(c)
+      );
+      if (btnKey) btn.classList.toggle('active', btnKey === rating);
+    });
+    const naBtn = row.querySelector('.na-btn');
+    if (naBtn) naBtn.classList.toggle('active', rating === 'na');
+
+    // Show/hide deficiency area
+    const defArea = document.getElementById('deficiency-' + findingId);
+    if (defArea) defArea.style.display = isIssueRating(rating) ? '' : 'none';
+  }
+
+  updateCategoryProgress(targetDoor);
+  updateDoorHeaderProgress(targetDoor);
+
+  if (_findingsFilter === 'issues') setFindingsFilter('issues');
+}
+
+function queueSync(findingId, data) {
+  if (_syncTimers[findingId]) clearTimeout(_syncTimers[findingId]);
+  _syncTimers[findingId] = setTimeout(() => {
+    syncFinding(findingId, data);
+    delete _syncTimers[findingId];
+  }, 400);
+}
+
+async function syncFinding(findingId, data) {
+  try {
+    await fetch('/api/checklists/item/' + findingId, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch(e) { /* offline — data is in localStorage */ }
+}
+
+// ─── Category Collapse ────────────────────────────────────────────────────────
+
+function toggleCategory(header) {
+  const items   = header.parentElement.querySelector('.category-items');
+  const chevron = header.querySelector('.chevron');
+  if (!items) return;
+  const collapsed = items.classList.toggle('collapsed');
+  if (chevron) chevron.textContent = collapsed ? '▶' : '▼';
+}
+
+function setFindingsFilter(mode) {
+  _findingsFilter = mode;
+  document.querySelectorAll('.issues-toggle button').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('toggle-' + (mode === 'all' ? 'all' : 'issues'));
+  if (btn) btn.classList.add('active');
+
+  document.querySelectorAll('.finding-row').forEach(row => {
+    if (mode === 'issues') {
+      const r = row.dataset.rating || '';
+      row.style.display = isIssueRating(r) ? '' : 'none';
+    } else {
+      row.style.display = '';
+    }
+  });
+}
+
+// ─── Notes ────────────────────────────────────────────────────────────────────
+
+function toggleNotes(findingId) {
+  const area = document.getElementById('notes-' + findingId);
+  if (!area) return;
+  const visible = area.style.display !== 'none';
+  area.style.display = visible ? 'none' : '';
+  if (!visible) area.querySelector('textarea')?.focus();
+}
+
+function saveNote(findingId, value) {
+  if (!_currentInspection) return;
+  for (const door of (_currentInspection.doors || [])) {
+    const f = (door.findings || []).find(f => f.id === findingId);
+    if (f) {
+      f.notes = value;
+      queueSync(findingId, { rating: f.rating || null, note: value });
+      const notesBtn = document.getElementById('notes-btn-' + findingId);
+      if (notesBtn) notesBtn.classList.toggle('has-notes', !!value.trim());
+      break;
+    }
+  }
+}
+
+// ─── Inline Deficiency Capture ────────────────────────────────────────────────
+
+function _getDeficiencyInfo(findingId) {
+  if (!_currentInspection) return null;
+  for (const door of (_currentInspection.doors || [])) {
+    const f = (door.findings || []).find(f => f.id === findingId);
+    if (f) return { finding: f, door };
+  }
+  return null;
+}
+
+async function saveDeficiencyTitle(findingId, value) {
+  if (!value || !value.trim()) return;
+  const info = _getDeficiencyInfo(findingId);
+  if (!info) return;
+  const { finding, door } = info;
+
+  if (finding.deficiency && finding.deficiency.id) {
+    // Update existing
+    await fetch('/api/inspections/' + _currentInspection.id + '/deficiencies/' + finding.deficiency.id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: value })
+    }).catch(() => {});
+    finding.deficiency.title = value;
+  } else {
+    // Create new
+    try {
+      const resp = await fetch('/api/inspections/' + _currentInspection.id + '/deficiencies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          door_id: door.id,
+          checklist_item_id: findingId,
+          title: value,
+          description: value,
+          severity: 'advisory',
+          include_in_quote: true
+        })
+      });
+      if (resp.ok) {
+        const def = await resp.json();
+        finding.deficiency = {
+          id: def.id, title: def.title || def.description,
+          description: def.description, severity: def.severity,
+          include_in_quote: def.include_in_quote
+        };
+      }
+    } catch(e) {}
+  }
+}
+
+async function saveDeficiencyDesc(findingId, value) {
+  const info = _getDeficiencyInfo(findingId);
+  if (!info || !info.finding.deficiency?.id) return;
+  await fetch('/api/inspections/' + _currentInspection.id + '/deficiencies/' + info.finding.deficiency.id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description: value })
+  }).catch(() => {});
+  if (info.finding.deficiency) info.finding.deficiency.description = value;
+}
+
+async function saveDeficiencySeverity(findingId, value) {
+  const info = _getDeficiencyInfo(findingId);
+  if (!info || !info.finding.deficiency?.id) return;
+  await fetch('/api/inspections/' + _currentInspection.id + '/deficiencies/' + info.finding.deficiency.id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ severity: value })
+  }).catch(() => {});
+  if (info.finding.deficiency) info.finding.deficiency.severity = value;
+}
+
+async function saveDeficiencyQuote(findingId, checked) {
+  const info = _getDeficiencyInfo(findingId);
+  if (!info || !info.finding.deficiency?.id) return;
+  await fetch('/api/inspections/' + _currentInspection.id + '/deficiencies/' + info.finding.deficiency.id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ include_in_quote: checked })
+  }).catch(() => {});
+  if (info.finding.deficiency) info.finding.deficiency.include_in_quote = checked;
+}
+
+// ─── Progress update helpers ──────────────────────────────────────────────────
+
+function updateCategoryProgress(door) {
+  const byCategory = {};
+  (door.findings || []).forEach(f => {
+    const cat = f.template_category || f.category || 'General';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(f);
   });
 
-  if (!resp.ok) { alert('Upload failed.'); return; }
+  document.querySelectorAll('.checklist-category').forEach(catEl => {
+    const catName   = catEl.dataset.category;
+    const catItems  = byCategory[catName] || [];
+    const done      = catItems.filter(f => f.rating && f.rating !== 'na').length;
+    const issues    = catItems.filter(f => isIssueRating(f.rating)).length;
 
-  await loadDoorPhotos(doorId);
-  // Re-render door detail to show new photo
-  const updated = await fetch('/api/inspections/' + _currentInspection.id, { credentials: 'include' });
-  _currentInspection = await updated.json();
-  renderDoorDetailWithPhotos(doorId);
-  showToast('Photo uploaded ✓');
+    const progEl = catEl.querySelector('.category-progress');
+    if (progEl) progEl.textContent = done + '/' + catItems.length;
+
+    const header = catEl.querySelector('.category-header');
+    let badge    = catEl.querySelector('.door-issue-badge');
+    if (issues > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'door-issue-badge';
+        badge.style.marginLeft = '6px';
+        const chevron = header.querySelector('.chevron');
+        if (chevron) header.insertBefore(badge, chevron);
+        else header.appendChild(badge);
+      }
+      badge.textContent = issues;
+    } else if (badge) {
+      badge.remove();
+    }
+  });
 }
 
-async function deletePhoto(photoId, doorId) {
+function updateDoorHeaderProgress(door) {
+  const dp     = calcDoorProgress(door);
+  const progEl = document.querySelector('.door-progress');
+  if (progEl) progEl.textContent = dp.done + '/' + dp.total;
+}
+
+// ─── Door Complete ────────────────────────────────────────────────────────────
+
+function completeDoor(doorId) {
+  // Mark all unrated items as n/a then return to overview
+  const door = (_currentInspection?.doors || []).find(d => d.id === doorId);
+  if (!door) return;
+
+  // Rate any still-unrated items as 'na' so progress = 100%
+  (door.findings || []).forEach(f => {
+    if (!f.rating) {
+      f.rating = 'na';
+      queueSync(f.id, { rating: 'na', note: f.notes || '' });
+    }
+  });
+
+  renderInspectionOverview();
+}
+
+// ─── Photos ───────────────────────────────────────────────────────────────────
+
+function handlePhotoBtn(findingId) {
+  const input = document.getElementById('photo-input-' + findingId);
+  if (input) input.click();
+}
+
+async function handlePhotoUpload(findingId, input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  if (!_currentInspection) return;
+
+  let door = null;
+  for (const d of (_currentInspection.doors || [])) {
+    if ((d.findings || []).find(f => f.id === findingId)) { door = d; break; }
+  }
+  if (!door) return;
+
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append('photo', file);
+    fd.append('inspection_id', _currentInspection.id);
+    fd.append('door_id', door.id);
+    fd.append('checklist_item_id', findingId);
+
+    try {
+      const resp = await fetch('/api/photos', { method: 'POST', body: fd });
+      if (resp.ok) {
+        const photo = await resp.json();
+        const f = (door.findings || []).find(f => f.id === findingId);
+        if (f) {
+          if (!f.photos) f.photos = [];
+          f.photos.push(photo);
+          const strip = document.getElementById('photo-strip-' + findingId);
+          if (strip) strip.innerHTML = renderPhotoStrip(findingId, f.photos);
+
+          // Update photo button
+          const btn = document.querySelector(`#finding-${findingId} .photo-btn`);
+          if (btn) {
+            const count = f.photos.length;
+            btn.innerHTML = `<img src="${f.photos[0].url}" style="width:22px;height:22px;object-fit:cover;border-radius:3px;" onerror="this.style.display='none'">${count > 1 ? `<sup style="font-size:0.65rem;margin-left:1px;">+${count-1}</sup>` : ''}`;
+          }
+        }
+      }
+    } catch(e) { showToast('Photo upload failed', 'error'); }
+  }
+
+  input.value = ''; // reset so same file can be re-selected
+}
+
+async function deletePhoto(photoId, findingId) {
   if (!confirm('Delete this photo?')) return;
-  await fetch('/api/photos/' + photoId, { method: 'DELETE', credentials: 'include' });
-  await loadDoorPhotos(doorId);
-  renderDoorDetailWithPhotos(doorId);
+  await fetch('/api/photos/' + photoId, { method: 'DELETE' }).catch(() => {});
+
+  if (_currentInspection) {
+    for (const door of (_currentInspection.doors || [])) {
+      const f = (door.findings || []).find(f => f.id === findingId);
+      if (f && f.photos) {
+        f.photos = f.photos.filter(p => p.id !== photoId);
+        const strip = document.getElementById('photo-strip-' + findingId);
+        if (strip) strip.innerHTML = renderPhotoStrip(findingId, f.photos);
+        const btn = document.querySelector(`#finding-${findingId} .photo-btn`);
+        if (btn) {
+          if (f.photos.length === 0) {
+            btn.innerHTML = '📷';
+          } else {
+            btn.innerHTML = `<img src="${f.photos[0].url}" style="width:22px;height:22px;object-fit:cover;border-radius:3px;" onerror="this.style.display='none'">${f.photos.length > 1 ? `<sup style="font-size:0.65rem;">+${f.photos.length-1}</sup>` : ''}`;
+          }
+        }
+        break;
+      }
+    }
+  }
 }
 
-function viewPhoto(url) {
+function openPhotoLightbox(url) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
   overlay.innerHTML = `<img src="${url}" style="max-width:95vw;max-height:95vh;border-radius:8px;object-fit:contain;">`;
@@ -247,75 +678,14 @@ function viewPhoto(url) {
   document.body.appendChild(overlay);
 }
 
-// Enhanced door detail that includes photos and checklist button
-async function renderDoorDetailWithPhotos(doorId) {
-  _currentDoor = (_currentInspection.doors || []).find(d => d.id === doorId);
-  if (!_currentDoor) return;
-  await loadDoorPhotos(doorId);
-  renderDoorDetailFull();
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function escHtml(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function renderDoorDetailFull() {
-  const d = _currentDoor;
-  const i = _currentInspection;
-  const page = document.getElementById('page-inspections');
-  const doorDefs = (i.deficiencies || []).filter(def => def.door_id === d.id);
-
-  // Checklist completion
-  const clPass = _doorPhotos.length; // reuse slot - will be recalculated below
-
-  page.innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
-      <button onclick="renderInspectionDetail()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">←</button>
-      <h1 style="margin:0;">Door ${d.door_number}${d.location ? ' — ' + escDO(d.location) : ''}</h1>
-    </div>
-
-    <!-- Quick info chips -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:20px;max-width:700px;">
-      ${infoChip('Type', (d.door_type||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))}
-      ${infoChip('Size', d.door_width_ft && d.door_height_ft ? d.door_width_ft + "' × " + d.door_height_ft + "'" : d.door_size)}
-      ${infoChip('Condition', d.overall_condition)}
-      ${infoChip('Make', d.make)}
-      ${infoChip('Model', d.model)}
-      ${infoChip('Serial', d.serial_number)}
-      ${infoChip('Install Year', d.install_year)}
-      ${infoChip('Opener', [d.opener_make,d.opener_model,d.opener_hp?d.opener_hp+'hp':null].filter(Boolean).join(' '))}
-    </div>
-
-    ${d.notes ? `<div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--muted);">${escDO(d.notes)}</div>` : ''}
-
-    <!-- Action buttons -->
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
-      <button onclick="openChecklist(${d.id})" style="padding:9px 16px;background:var(--orange);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;cursor:pointer;">📋 Checklist</button>
-      <button onclick="addDeficiencyForDoor(${d.id})" style="padding:9px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">⚠️ Add Deficiency</button>
-      <button onclick="deleteDoor(${d.id})" style="padding:9px 16px;background:#ef444422;border:1px solid #ef444444;border-radius:8px;color:#ef4444;font-size:13px;cursor:pointer;">🗑 Delete</button>
-    </div>
-
-    <!-- Photos -->
-    ${renderPhotoSection(d.id)}
-
-    <!-- Deficiencies -->
-    <div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Deficiencies (${doorDefs.length})</div>
-        <button onclick="addDeficiencyForDoor(${d.id})" style="padding:5px 10px;background:var(--orange);border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;cursor:pointer;">+ Add</button>
-      </div>
-      ${doorDefs.length ? doorDefs.map(def => deficiencyCard(def)).join('') : '<div style="color:var(--muted);font-size:13px;">No deficiencies recorded.</div>'}
-    </div>
-  `;
-}
-
-// ─── TOAST ────────────────────────────────────────────────────────────────────
-function showToast(msg) {
-  let toast = document.getElementById('do-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'do-toast';
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1f2937;color:#f9fafb;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:9998;transition:opacity 0.3s;border:1px solid #374151;';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = msg;
-  toast.style.opacity = '1';
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 2500);
+function escAttr(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }

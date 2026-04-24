@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>DoorOps — Inspection Portal</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --muted: #64748b;
+      --green: #16a34a;
+      --green-light: #22c55e;
+      --danger: #dc2626;
+      --warn: #d97706;
+      --purple: #7c3aed;
+      --nav-bg: #1e2832;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ── */
+    .portal-nav {
+      background: var(--nav-bg);
+      padding: 0 20px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .portal-logo {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: #22c55e;
+      letter-spacing: -0.02em;
+    }
+    .portal-company {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      flex: 1;
+    }
+
+    /* ── LAYOUT ── */
+    .portal-container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 0 16px 80px;
+    }
+
+    /* ── HERO ── */
+    .portal-hero {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 20px 0 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .portal-greeting {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .portal-subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    /* ── SECTION TITLE ── */
+    .section-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin: 20px 0 10px;
+    }
+
+    /* ── INSPECTION CARD ── */
+    .insp-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: box-shadow 0.15s, border-color 0.15s;
+      text-decoration: none;
+      display: block;
+      color: var(--text);
+    }
+    .insp-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      border-color: var(--green-light);
+    }
+    .insp-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .insp-card-address {
+      font-weight: 700;
+      font-size: 1rem;
+      line-height: 1.3;
+    }
+    .insp-card-date {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .status-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .status-published { background: #f3e8ff; color: #7c3aed; }
+    .status-sent      { background: #fdf4ff; color: #6d28d9; }
+
+    .insp-card-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 0.82rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .meta-issues { color: var(--danger); font-weight: 600; }
+
+    /* ── ACTION BUTTONS ── */
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: var(--green);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.12s;
+    }
+    .btn-download:hover { background: #15803d; }
+    .btn-view {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.12s;
+    }
+    .btn-view:hover { border-color: var(--green-light); color: var(--green); }
+
+    /* ── NEXT INSPECTION NOTICE ── */
+    .next-notice {
+      background: #fefce8;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #92400e;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── DETAIL VIEW ── */
+    .detail-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .detail-section h3 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .deficiency-row {
+      display: flex;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+    .deficiency-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .sev-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+    .sev-advisory       { background: #22c55e; }
+    .sev-moderate       { background: #f59e0b; }
+    .sev-safety_critical { background: #ef4444; }
+    .def-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 2px; }
+    .def-desc  { font-size: 0.83rem; color: var(--muted); }
+
+    .door-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .door-row:last-child { border-bottom: none; }
+    .door-row-label { font-weight: 600; }
+    .door-row-type  { font-size: 0.8rem; color: var(--muted); margin-top: 1px; }
+
+    /* ── LOADING / ERROR ── */
+    .portal-loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .portal-loading .spinner {
+      font-size: 2rem;
+      animation: spin 1.2s linear infinite;
+      display: block;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .portal-error {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 48px 24px;
+      text-align: center;
+      margin: 40px 0;
+    }
+    .portal-error .err-icon { font-size: 2.5rem; margin-bottom: 12px; display: block; }
+    .portal-error h2 { font-size: 1.2rem; margin-bottom: 6px; }
+    .portal-error p  { font-size: 0.9rem; color: var(--muted); }
+
+    /* ── BACK BUTTON ── */
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--green);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 12px 0;
+      margin-bottom: 4px;
+    }
+
+    /* ── FOOTER ── */
+    .portal-footer {
+      text-align: center;
+      padding: 24px 16px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border);
+      margin-top: 24px;
+    }
+    .portal-footer a { color: var(--green); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<nav class="portal-nav">
+  <span class="portal-logo">DoorOps</span>
+  <span class="portal-company" id="nav-company">Loading…</span>
+</nav>
+
+<div class="portal-container">
+  <div id="portal-root">
+    <div class="portal-loading">
+      <span class="spinner">⟳</span>
+      Loading your inspection report…
+    </div>
+  </div>
+</div>
+
+<div class="portal-footer">
+  Powered by <a href="https://app.doorops.app" target="_blank">DoorOps</a> — Professional Door Inspection Software
+</div>
+
+<script>
+// ── State ──
+let _portalData = null;    // { company, contact_name, inspections, current_token }
+let _detailData = null;    // inspection detail
+
+// ── Helpers ──
+function escH(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmt(dateStr) {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function doorTypeLabel(dt) {
+  const m = { sectional: 'Sectional Door', rolling_steel: 'Rolling Steel', high_speed: 'High Speed', fire_door: 'Fire Door', dock_leveler: 'Dock Leveler', other: 'Other' };
+  return m[dt] || dt;
+}
+
+// ── Load portal data ──
+async function loadPortal() {
+  const token = location.pathname.split('/portal/')[1]?.split('/')[0];
+  if (!token) { showError('Invalid portal link'); return; }
+
+  try {
+    const resp = await fetch('/api/portal/' + token);
+    if (!resp.ok) { showError('Report not found or not published.'); return; }
+    _portalData = await resp.json();
+
+    document.getElementById('nav-company').textContent = _portalData.company?.name || 'DoorOps';
+
+    // If only one inspection, go straight to detail
+    if (_portalData.inspections.length === 1) {
+      loadDetail(_portalData.inspections[0].portal_token);
+    } else {
+      renderList();
+    }
+  } catch(e) {
+    showError('Could not load the portal. Please check the link and try again.');
+  }
+}
+
+// ── Render inspection list ──
+function renderList() {
+  const data = _portalData;
+  const root = document.getElementById('portal-root');
+
+  root.innerHTML = `
+    <div class="portal-hero">
+      <div class="portal-greeting">👋 Hi, ${escH(data.contact_name || 'there')}!</div>
+      <div class="portal-subtitle">Your inspection reports from <strong>${escH(data.company?.name || 'DoorOps')}</strong></div>
+    </div>
+    <div class="section-title">Your Reports (${data.inspections.length})</div>
+    ${data.inspections.map(i => renderInspCard(i)).join('')}`;
+}
+
+function renderInspCard(i) {
+  const isCurrentToken = i.portal_token === _portalData?.current_token;
+  const defs = i.deficiency_count || 0;
+  const nextDate = i.next_inspection_date;
+  return `
+    <div class="insp-card" onclick="loadDetail('${escH(i.portal_token)}')">
+      <div class="insp-card-header">
+        <div>
+          <div class="insp-card-address">${escH(i.property_name || i.property_address)}</div>
+          ${i.property_name ? `<div style="font-size:0.8rem;color:var(--muted);">${escH(i.property_address)}</div>` : ''}
+          <div class="insp-card-date">Inspected: ${fmt(i.inspection_date)}</div>
+        </div>
+        <span class="status-badge status-${i.status}">${i.status}</span>
+      </div>
+      <div class="insp-card-meta">
+        <span>🚪 ${i.door_count || 0} door${i.door_count != 1 ? 's' : ''}</span>
+        ${defs > 0 ? `<span class="meta-issues">⚠ ${defs} issue${defs != 1 ? 's' : ''}</span>` : '<span style="color:var(--green);">✓ No issues</span>'}
+        <span style="margin-left:auto;font-size:0.8rem;color:var(--green);font-weight:600;">View report →</span>
+      </div>
+      ${nextDate ? `<div class="next-notice">📅 Next inspection recommended: <strong>${fmt(nextDate)}</strong>${i.inspection_frequency ? ' (' + escH(i.inspection_frequency) + ')' : ''}</div>` : ''}
+    </div>`;
+}
+
+// ── Load inspection detail ──
+async function loadDetail(token) {
+  const root = document.getElementById('portal-root');
+  root.innerHTML = '<div class="portal-loading"><span class="spinner">⟳</span>Loading report…</div>';
+
+  try {
+    const resp = await fetch('/api/portal/inspection/' + token);
+    if (!resp.ok) { showError('Report not found.'); return; }
+    _detailData = await resp.json();
+    renderDetail(token);
+  } catch(e) {
+    showError('Could not load report.');
+  }
+}
+
+// ── Render detail ──
+function renderDetail(token) {
+  const { inspection: i, company, inspector_name, doors, deficiencies } = _detailData;
+  const root = document.getElementById('portal-root');
+
+  const safetyCritical = deficiencies.filter(d => d.severity === 'safety_critical');
+  const moderate       = deficiencies.filter(d => d.severity === 'moderate');
+  const advisory       = deficiencies.filter(d => d.severity === 'advisory');
+
+  const hasMultiple = _portalData?.inspections?.length > 1;
+
+  // Summary stats
+  let totalFindings = 0, ratedFindings = 0, issueFindings = 0;
+  (doors || []).forEach(d => {
+    (d.findings || []).forEach(f => {
+      if (f.rating !== 'na') totalFindings++;
+      if (f.rating && f.rating !== 'na') ratedFindings++;
+      if (['fair','poor','needs_attention','fail'].includes(f.rating)) issueFindings++;
+    });
+  });
+
+  root.innerHTML = `
+    ${hasMultiple ? `<button class="back-link" onclick="renderList()">← All Reports</button>` : ''}
+
+    <div class="portal-hero">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <div>
+          <div class="portal-greeting" style="font-size:1.2rem;">${escH(i.property_name || i.property_address)}</div>
+          ${i.property_name ? `<div style="font-size:0.9rem;color:var(--muted);margin-top:2px;">${escH(i.property_address)}</div>` : ''}
+        </div>
+        <span class="status-badge status-${i.status}" style="font-size:0.75rem;padding:3px 10px;">${i.status}</span>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:12px;font-size:0.85rem;flex-wrap:wrap;">
+        <span>📅 ${fmt(i.inspection_date)}</span>
+        <span>👤 ${escH(inspector_name || company?.name || '—')}</span>
+        <span>🏢 ${escH(company?.name || '—')}</span>
+      </div>
+
+      ${i.next_inspection_date ? `<div class="next-notice" style="margin-top:12px;">📅 Next inspection recommended: <strong>${fmt(i.next_inspection_date)}</strong>${i.inspection_frequency ? ' (' + escH(i.inspection_frequency) + ')' : ''}</div>` : ''}
+
+      <div class="card-actions">
+        <a href="/api/portal/pdf/${token}" class="btn-download">⬇ Download PDF</a>
+        ${company?.phone ? `<a href="tel:${escH(company.phone)}" class="btn-view">📞 ${escH(company.phone)}</a>` : ''}
+        ${company?.email ? `<a href="mailto:${escH(company.email)}" class="btn-view">✉ Contact Us</a>` : ''}
+      </div>
+    </div>
+
+    <!-- Summary stats -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:var(--text);">${doors.length}</div>
+        <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Doors</div>
+      </div>
+      <div style="background:${deficiencies.length > 0 ? '#fef2f2' : '#f0fdf4'};border:1px solid ${deficiencies.length > 0 ? '#fecaca' : '#bbf7d0'};border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:${deficiencies.length > 0 ? 'var(--danger)' : 'var(--green)'};">${deficiencies.length}</div>
+        <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Issues Found</div>
+      </div>
+      <div style="background:${safetyCritical.length > 0 ? '#fef2f2' : '#f8fafc'};border:1px solid ${safetyCritical.length > 0 ? '#fecaca' : 'var(--border)'};border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:${safetyCritical.length > 0 ? 'var(--danger)' : 'var(--text)'};">${safetyCritical.length}</div>
+        <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Safety Critical</div>
+      </div>
+    </div>
+
+    <!-- Deficiencies -->
+    ${deficiencies.length > 0 ? `
+    <div class="detail-section">
+      <h3>Deficiencies Found (${deficiencies.length})</h3>
+      ${[...safetyCritical, ...moderate, ...advisory].map(def => {
+        const sevColors = { advisory: '#22c55e', moderate: '#f59e0b', safety_critical: '#ef4444' };
+        const sevLabels = { advisory: 'Advisory', moderate: 'Moderate', safety_critical: '⚠ Safety Critical' };
+        const title = def.title || def.description || '';
+        const desc  = (def.description && def.title && def.description !== def.title) ? def.description : '';
+        return `<div class="deficiency-row">
+          <div class="sev-dot sev-${def.severity}"></div>
+          <div style="flex:1;min-width:0;">
+            <div class="def-title">${escH(title)}</div>
+            ${desc ? `<div class="def-desc">${escH(desc)}</div>` : ''}
+            <div style="font-size:0.75rem;color:${sevColors[def.severity]};font-weight:600;margin-top:3px;">${sevLabels[def.severity] || def.severity}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>` : `
+    <div class="detail-section" style="text-align:center;padding:24px;">
+      <div style="font-size:2rem;margin-bottom:8px;">✅</div>
+      <div style="font-weight:700;font-size:1rem;margin-bottom:4px;">No Issues Found</div>
+      <div style="color:var(--muted);font-size:0.85rem;">All checked items passed inspection.</div>
+    </div>`}
+
+    <!-- Doors inspected -->
+    <div class="detail-section">
+      <h3>Doors Inspected (${doors.length})</h3>
+      ${(doors || []).map(d => {
+        const dFindings = (d.findings || []);
+        const dDone = dFindings.filter(f => f.rating && f.rating !== 'na').length;
+        const dIssues = dFindings.filter(f => ['fair','poor','needs_attention','fail'].includes(f.rating)).length;
+        const label = d.location_label || d.location || ('Door ' + d.door_number);
+        const config = [d.make, d.model, d.door_width_ft && d.door_height_ft ? d.door_width_ft + "'×" + d.door_height_ft + "'" : null].filter(Boolean).join(' · ');
+        return `<div class="door-row">
+          <div>
+            <div class="door-row-label">${escH(label)}</div>
+            <div class="door-row-type">${doorTypeLabel(d.door_type)}${config ? ' · ' + escH(config) : ''}</div>
+          </div>
+          <div style="text-align:right;font-size:0.82rem;">
+            <div style="color:var(--muted);">${dDone}/${dFindings.filter(f => f.rating !== 'na').length || dFindings.length} items</div>
+            ${dIssues > 0 ? `<div style="color:var(--danger);font-weight:600;">${dIssues} issue${dIssues !== 1 ? 's' : ''}</div>` : '<div style="color:var(--green);">✓ Clear</div>'}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${i.notes ? `<div class="detail-section"><h3>Inspector Notes</h3><p style="font-size:0.9rem;color:var(--muted);line-height:1.5;">${escH(i.notes)}</p></div>` : ''}`;
+}
+
+// ── Error state ──
+function showError(msg) {
+  document.getElementById('portal-root').innerHTML = `
+    <div class="portal-error">
+      <span class="err-icon">🔒</span>
+      <h2>Report Not Available</h2>
+      <p>${escH(msg)}</p>
+      <p style="margin-top:12px;font-size:0.82rem;">If you believe this is an error, please contact your inspector.</p>
+    </div>`;
+  document.getElementById('nav-company').textContent = 'DoorOps';
+}
+
+// ── Init ──
+loadPortal();
+</script>
+</body>
+</html>

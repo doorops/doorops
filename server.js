@@ -21,6 +21,7 @@ app.use('/api/photos', require('./routes/photos'));
 app.use('/api/team', require('./routes/team'));
 app.use('/api/jobber', require('./routes/jobber'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/portal', require('./routes/portal'));
 
 // Serve frontend for all non-API routes (SPA)
 app.get('*', (req, res) => {
@@ -28,6 +29,8 @@ app.get('*', (req, res) => {
   // Named HTML pages
   if (req.path === '/privacy') return res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
   if (req.path === '/terms') return res.sendFile(path.join(__dirname, 'public', 'terms.html'));
+  // Client portal — serve portal.html for /portal/:token
+  if (req.path.startsWith('/portal/')) return res.sendFile(path.join(__dirname, 'public', 'portal.html'));
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

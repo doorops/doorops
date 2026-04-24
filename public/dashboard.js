@@ -91,9 +91,54 @@ async function loadDashboard() {
         </button>
       </div>
     `;
+    // Upcoming scheduled inspections
+    loadUpcomingInspections();
+
   } catch {
     document.getElementById('dash-stats').innerHTML = '<p style="color:var(--muted);">Could not load stats.</p>';
   }
+}
+
+async function loadUpcomingInspections() {
+  try {
+    const resp = await fetch('/api/inspections/upcoming', { credentials: 'include' });
+    if (!resp.ok) return;
+    const upcoming = await resp.json();
+    if (!upcoming.length) return;
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const thisWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const el = document.createElement('div');
+    el.style.cssText = 'margin-top:20px;max-width:900px;';
+    el.innerHTML = `
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:12px;">📅 Upcoming Scheduled (${upcoming.length})</div>
+      ${upcoming.map(i => {
+        const next = new Date(i.next_inspection_date);
+        const isOverdue = next < today;
+        const isSoon   = next <= thisWeek;
+        const color = isOverdue ? '#ef4444' : isSoon ? '#f59e0b' : '#22c55e';
+        const daysLeft = Math.round((next - today) / (1000*60*60*24));
+        const daysLabel = isOverdue ? `${Math.abs(daysLeft)}d overdue` : daysLeft === 0 ? 'Today' : `${daysLeft}d away`;
+        return `<div onclick="navigate('inspections');setTimeout(()=>openInspection(${i.id}),300)"
+             style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${color};border-radius:0 10px 10px 0;padding:11px 14px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;transition:border-color 0.15s;"
+             onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="min-width:0;">
+            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escDO(i.property_name || i.property_address)}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px;">${escDO(i.property_address)} · ${(i.inspection_frequency || '').replace(/-/g,' ')}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:12px;font-weight:700;color:${color};white-space:nowrap;">${daysLabel}</div>
+            <div style="font-size:11px;color:var(--muted);">${new Date(i.next_inspection_date).toLocaleDateString('en-CA')}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    `;
+
+    const page = document.getElementById('page-dashboard');
+    page.appendChild(el);
+  } catch(e) { /* non-critical */ }
 }
 
 function statCard(val, label, icon, style) {
