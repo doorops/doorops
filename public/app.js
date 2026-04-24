@@ -1,6 +1,29 @@
-// DoorOps — Frontend App v2
+// DoorOps — Frontend App v3
 let _currentUser = null;
 let _currentCompany = null;
+
+// ---- TOKEN HELPERS ----
+function getToken() {
+  return localStorage.getItem('do_token') || '';
+}
+function setToken(t) {
+  if (t) localStorage.setItem('do_token', t);
+}
+function clearToken() {
+  localStorage.removeItem('do_token');
+}
+
+// Override fetch to always send token header — MUST be before DOMContentLoaded
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+  const token = getToken();
+  if (token && String(url).startsWith('/')) {
+    opts.headers = opts.headers || {};
+    opts.headers['x-auth-token'] = token;
+  }
+  opts.credentials = 'include';
+  return _origFetch(url, opts);
+};
 
 // Register service worker to clear PWA cache
 if ('serviceWorker' in navigator) {
@@ -22,29 +45,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
-
-// ---- TOKEN HELPERS ----
-function getToken() {
-  return localStorage.getItem('do_token') || '';
-}
-function setToken(t) {
-  if (t) localStorage.setItem('do_token', t);
-}
-function clearToken() {
-  localStorage.removeItem('do_token');
-}
-
-// Override fetch to always send token header
-const _origFetch = window.fetch.bind(window);
-window.fetch = (url, opts = {}) => {
-  const token = getToken();
-  if (token && String(url).startsWith('/')) {
-    opts.headers = opts.headers || {};
-    opts.headers['x-auth-token'] = token;
-  }
-  opts.credentials = 'include';
-  return _origFetch(url, opts);
-};
 
 async function checkAuth() {
   try {
