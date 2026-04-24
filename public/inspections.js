@@ -438,10 +438,21 @@ async function submitAddDoor() {
   const resp = await apiInsp('/' + _currentInspection.id + '/doors', 'POST', body);
   if (!resp.ok) { alert('Failed to save door. Please try again.'); return; }
 
-  // Reload inspection and go back to detail
+  const newDoor = await resp.json();
+
+  // Reload inspection data
   const updated = await apiInsp('/' + _currentInspection.id, 'GET');
   _currentInspection = await updated.json();
-  renderInspectionDetail();
+
+  // Auto-open checklist for the new door (AccessGuard-style flow)
+  const savedDoor = (_currentInspection.doors || []).find(d => d.id === newDoor.id) || newDoor;
+  _currentDoor = savedDoor;
+  showToast('Door saved — starting checklist');
+  if (typeof openChecklist === 'function') {
+    openChecklist(savedDoor.id);
+  } else {
+    renderInspectionDetail();
+  }
 }
 
 // ─── DOOR DETAIL ──────────────────────────────────────────────────────────────
@@ -647,8 +658,9 @@ async function startInspection(id) {
   if (!resp.ok) { showToast('Failed to update status'); return; }
   const updated = await apiInsp('/' + id, 'GET');
   _currentInspection = await updated.json();
-  renderInspectionDetail();
-  showToast('Inspection started!');
+  // Go straight to add-door form so tech can start logging doors immediately
+  showToast('Inspection started — add your first door');
+  showAddDoorForm();
 }
 
 async function markComplete(id) {
