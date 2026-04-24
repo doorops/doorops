@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#1e2832">
+  <meta name="theme-color" content="#111827">
   <title>DoorOps</title>
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css?v=2">
+  <link rel="stylesheet" href="/style.css?v=5">
 </head>
 <body>
   <div id="app">
@@ -25,7 +25,6 @@
           <button class="auth-tab" onclick="showTab('signup')">Start Free Trial</button>
         </div>
 
-        <!-- Login Form -->
         <form id="login-form" onsubmit="handleLogin(event)">
           <div class="form-group">
             <label>Email</label>
@@ -39,7 +38,6 @@
           <button type="submit" class="btn-auth">Sign In</button>
         </form>
 
-        <!-- Signup Form -->
         <form id="signup-form" style="display:none;" onsubmit="handleSignup(event)">
           <div class="form-group">
             <label>Company Name</label>
@@ -64,43 +62,65 @@
       </div>
     </div>
 
-    <!-- App Shell (shown after login) -->
+    <!-- App Shell -->
     <div id="app-shell" style="display:none;">
-      <!-- Nav -->
       <nav class="top-nav">
+        <button class="nav-menu-btn" onclick="toggleMenu()">☰</button>
         <div class="nav-brand">
           <img src="/logo.png" alt="DoorOps" style="height:30px;width:auto;border-radius:5px;background:#e8ede6;padding:4px;">
+          <span id="nav-company-name" class="nav-company-name"></span>
         </div>
-        <div class="nav-company" id="nav-company-name"></div>
-        <button class="nav-menu-btn" onclick="toggleMenu()">☰</button>
+        <div id="settings-info" style="display:none;"></div>
       </nav>
 
-      <!-- Sidebar -->
-      <div id="sidebar" class="sidebar">
-        <div class="sidebar-section">
-          <button class="sidebar-item active" onclick="navigate('dashboard')">📊 Dashboard</button>
-          <button class="sidebar-item" onclick="navigate('inspections')">🔍 Inspections</button>
-          <button class="sidebar-item" onclick="navigate('team')">👥 Team</button>
-          <button class="sidebar-item" onclick="navigate('settings')">⚙️ Settings</button>
+      <div class="app-layout">
+        <!-- Sidebar (desktop) -->
+        <div id="sidebar" class="sidebar">
+          <div class="sidebar-section">
+            <button class="sidebar-item" data-page="dashboard" onclick="navigate('dashboard')">📊 Dashboard</button>
+            <button class="sidebar-item" data-page="inspections" onclick="navigate('inspections')">🔍 Inspections</button>
+            <button class="sidebar-item" data-page="team" onclick="navigate('team')">👥 Team</button>
+            <button class="sidebar-item" data-page="settings" onclick="navigate('settings')">⚙️ Settings</button>
+          </div>
+          <div class="sidebar-bottom">
+            <button class="sidebar-item" onclick="handleLogout()">→ Sign Out</button>
+          </div>
         </div>
-        <div class="sidebar-bottom">
-          <button class="sidebar-item" onclick="handleLogout()">→ Sign Out</button>
-        </div>
+
+        <!-- Main Content -->
+        <main id="main-content" class="main-content">
+          <div id="page-dashboard" class="page"></div>
+          <div id="page-inspections" class="page" style="display:none;"></div>
+          <div id="page-team" class="page" style="display:none;"></div>
+          <div id="page-settings" class="page" style="display:none;"></div>
+        </main>
       </div>
 
-      <!-- Main Content -->
-      <main id="main-content" class="main-content">
-        <div id="page-dashboard" class="page active"></div>
-        <div id="page-inspections" class="page" style="display:none;"></div>
-        <div id="page-team" class="page" style="display:none;"></div>
-        <div id="page-settings" class="page" style="display:none;"></div>
-      </main>
+      <!-- Bottom Nav (mobile only) -->
+      <nav class="bottom-nav">
+        <button class="bottom-nav-btn" data-page="dashboard" onclick="navigate('dashboard')">
+          <span class="bottom-nav-icon">📊</span>
+          <span class="bottom-nav-label">Dashboard</span>
+        </button>
+        <button class="bottom-nav-btn" data-page="inspections" onclick="navigate('inspections')">
+          <span class="bottom-nav-icon">🔍</span>
+          <span class="bottom-nav-label">Inspections</span>
+        </button>
+        <button class="bottom-nav-btn" data-page="team" onclick="navigate('team')">
+          <span class="bottom-nav-icon">👥</span>
+          <span class="bottom-nav-label">Team</span>
+        </button>
+        <button class="bottom-nav-btn" data-page="settings" onclick="navigate('settings')">
+          <span class="bottom-nav-icon">⚙️</span>
+          <span class="bottom-nav-label">Settings</span>
+        </button>
+      </nav>
     </div>
   </div>
 
-  <script src="/app.js?v=4"></script>
-  <script src="/inspections.js?v=4"></script>
-  <script src="/checklist.js?v=4"></script>
-  <script src="/dashboard.js?v=4"></script>
+  <script src="/app.js?v=5"></script>
+  <script src="/inspections.js?v=5"></script>
+  <script src="/checklist.js?v=5"></script>
+  <script src="/dashboard.js?v=5"></script>
 </body>
 </html>

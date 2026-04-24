@@ -61,7 +61,7 @@ async function jobberQuery(companyId, query, variables = {}) {
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      'X-JOBBER-GRAPHQL-VERSION': '2024-11-15'
+      'X-JOBBER-GRAPHQL-VERSION': '2026-04-16'
     }
   });
 
@@ -163,17 +163,14 @@ router.get('/status', requireAuth, async (req, res) => {
 // ─── GET today's jobs ─────────────────────────────────────────────────────────
 router.get('/jobs/today', requireAuth, async (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
     const data = await jobberQuery(req.companyId, `
-      query TodayJobs($start: ISO8601DateTime!, $end: ISO8601DateTime!) {
-        jobs(filter: { startAt: { gte: $start, lte: $end } }, first: 50) {
+      {
+        jobs(filter: { status: today }, first: 50) {
           nodes {
             id
             jobNumber
             title
             jobStatus
-            startAt
-            endAt
             client {
               id
               name
@@ -192,7 +189,7 @@ router.get('/jobs/today', requireAuth, async (req, res) => {
           }
         }
       }
-    `, { start: `${today}T00:00:00Z`, end: `${today}T23:59:59Z` });
+    `);
 
     const jobs = (data?.jobs?.nodes || []).map(j => ({
       id: j.id,
