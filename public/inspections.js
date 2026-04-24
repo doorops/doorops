@@ -236,7 +236,7 @@ function renderInspectionDetail() {
   `).join('');
 
   const defsHtml = (i.deficiencies || []).map(d => {
-    const sevColor = { advisory: '#6a8f50', moderate: '#d4a017', safety_critical: '#d63c3c' }[d.severity] || '#94a3b8';
+    const sevColor = { advisory: 'var(--green-light)', moderate: '#d4a017', safety_critical: '#d63c3c' }[d.severity] || '#94a3b8';
     const sevLabel = { advisory: 'Advisory', moderate: 'Moderate', safety_critical: 'Safety Critical' }[d.severity] || d.severity;
     return `
       <div style="background:var(--bg);border-left:3px solid ${sevColor};border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:8px;">
@@ -492,7 +492,7 @@ function infoChip(label, value) {
 }
 
 function deficiencyCard(def) {
-  const sevColor = { advisory: '#6a8f50', moderate: '#d4a017', safety_critical: '#d63c3c' }[def.severity] || '#94a3b8';
+  const sevColor = { advisory: 'var(--green-light)', moderate: '#d4a017', safety_critical: '#d63c3c' }[def.severity] || '#94a3b8';
   const sevLabel = { advisory: 'Advisory', moderate: 'Moderate', safety_critical: 'Safety Critical' }[def.severity] || def.severity;
   return `<div style="background:var(--surface);border-left:3px solid ${sevColor};border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:8px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -575,7 +575,7 @@ function showAddDeficiencyForm(doorId) {
 let _selectedSeverity = 'advisory';
 function setSeverity(sev) {
   _selectedSeverity = sev;
-  const colors = { advisory: '#6a8f50', moderate: '#d4a017', safety_critical: '#d63c3c' };
+  const colors = { advisory: 'var(--green-light)', moderate: '#d4a017', safety_critical: '#d63c3c' };
   ['advisory', 'moderate', 'safety_critical'].forEach(s => {
     const btn = document.getElementById('sev-' + s);
     if (!btn) return;
