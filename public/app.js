@@ -114,7 +114,10 @@ function navigate(page) {
   if (pageEl) pageEl.style.display = 'block';
 
   // Load page data
+  if (page === 'dashboard' && typeof loadDashboard === 'function') loadDashboard();
   if (page === 'inspections' && typeof loadInspections === 'function') loadInspections();
+  if (page === 'team' && typeof loadTeam === 'function') loadTeam();
+  if (page === 'settings' && typeof loadSettings === 'function') loadSettings();
 
   const sidebarBtns = document.querySelectorAll('.sidebar-item');
   sidebarBtns.forEach(b => {

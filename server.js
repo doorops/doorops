@@ -18,6 +18,7 @@ app.use('/api/inspections', require('./routes/inspections'));
 app.use('/api/pdf', require('./routes/pdf'));
 app.use('/api/checklists', require('./routes/checklists'));
 app.use('/api/photos', require('./routes/photos'));
+app.use('/api/team', require('./routes/team'));
 
 // Serve frontend for all non-API routes (SPA)
 app.get('*', (req, res) => {

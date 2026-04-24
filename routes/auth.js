@@ -95,4 +95,30 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// Change password
+router.post('/change-password', async (req, res) => {
+  try {
+    const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password || new_password.length < 8)
+      return res.status(400).json({ error: 'New password must be 8+ characters' });
+
+    const user = await db.query('SELECT password_hash FROM users WHERE id = $1', [decoded.userId]);
+    if (!user.rows.length) return res.status(404).json({ error: 'User not found' });
+
+    const match = await bcrypt.compare(current_password, user.rows[0].password_hash);
+    if (!match) return res.status(401).json({ error: 'Current password incorrect' });
+
+    const hash = await bcrypt.hash(new_password, 10);
+    await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, decoded.userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[change-password]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

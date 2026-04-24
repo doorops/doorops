@@ -90,53 +90,10 @@
 
       <!-- Main Content -->
       <main id="main-content" class="main-content">
-        <div id="page-dashboard" class="page active">
-          <h1>Welcome to DoorOps 🚪</h1>
-          <p style="color:var(--muted);margin-bottom:32px;">Your field operations hub. More features coming soon.</p>
-          <div class="dash-grid">
-            <div class="dash-card" onclick="navigate('inspections')">
-              <div class="dash-icon">🔍</div>
-              <div class="dash-label">Inspections</div>
-              <div class="dash-sub">Commercial door reports</div>
-            </div>
-            <div class="dash-card" onclick="navigate('team')">
-              <div class="dash-icon">👥</div>
-              <div class="dash-label">Team</div>
-              <div class="dash-sub">Staff & roles</div>
-            </div>
-            <div class="dash-card" onclick="navigate('settings')">
-              <div class="dash-icon">⚙️</div>
-              <div class="dash-label">Settings</div>
-              <div class="dash-sub">Jobber, billing, profile</div>
-            </div>
-          </div>
-        </div>
-
-        <div id="page-inspections" class="page" style="display:none;">
-          <h1>Inspections</h1>
-          <p style="color:var(--muted);">Coming soon — commercial door inspection reports with deficiency tracking and PDF generation.</p>
-        </div>
-
-        <div id="page-team" class="page" style="display:none;">
-          <h1>Team</h1>
-          <p style="color:var(--muted);">Coming soon — invite staff, manage roles, track hours.</p>
-        </div>
-
-        <div id="page-settings" class="page" style="display:none;">
-          <h1>Settings</h1>
-          <div class="settings-section">
-            <h3>Account</h3>
-            <p style="color:var(--muted);" id="settings-info"></p>
-          </div>
-          <div class="settings-section">
-            <h3>Integrations</h3>
-            <p style="color:var(--muted);">Jobber integration coming soon.</p>
-          </div>
-          <div class="settings-section">
-            <h3>Billing</h3>
-            <p style="color:var(--muted);">Subscription management coming soon.</p>
-          </div>
-        </div>
+        <div id="page-dashboard" class="page active"></div>
+        <div id="page-inspections" class="page" style="display:none;"></div>
+        <div id="page-team" class="page" style="display:none;"></div>
+        <div id="page-settings" class="page" style="display:none;"></div>
       </main>
     </div>
   </div>
@@ -144,5 +101,6 @@
   <script src="/app.js"></script>
   <script src="/inspections.js"></script>
   <script src="/checklist.js"></script>
+  <script src="/dashboard.js"></script>
 </body>
 </html>

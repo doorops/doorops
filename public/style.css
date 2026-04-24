@@ -437,3 +437,23 @@ h1 {
   transition: border-color 0.15s;
 }
 .insp-row:hover { border-color: var(--green); }
+
+/* ---- DASHBOARD ACTION BUTTONS ---- */
+.dash-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+  text-align: left;
+}
+.dash-action-btn:hover {
+  border-color: var(--green);
+  transform: translateX(2px);
+}
