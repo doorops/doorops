@@ -4,8 +4,9 @@
   "description": "Field service & operations platform for overhead door companies",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#f59e0b",
+  "background_color": "#111827",
+  "theme_color": "#3d7a3a",
+  "version": "2",
   "orientation": "any",
   "icons": [
     {
