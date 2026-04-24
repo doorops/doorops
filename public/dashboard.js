@@ -203,6 +203,7 @@ async function removeMember(id, name) {
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 function loadSettings() {
+  setTimeout(loadJobberStatus, 200); // Load after DOM renders
   const page = document.getElementById('page-settings');
   const u = _currentUser;
   const c = _currentCompany;
@@ -239,9 +240,9 @@ function loadSettings() {
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
         <div>
           <div style="font-weight:600;font-size:14px;">Jobber</div>
-          <div style="font-size:12px;color:var(--muted);">Pull jobs & client info into inspections</div>
+          <div style="font-size:12px;color:var(--muted);" id="jobber-status-text">Pull jobs & client info into inspections</div>
         </div>
-        <span style="font-size:11px;font-weight:700;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:3px 10px;">Coming Soon</span>
+        <div id="jobber-connect-btn"><div style="width:80px;height:28px;background:var(--border);border-radius:14px;"></div></div>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
         <div>
@@ -267,6 +268,34 @@ function loadSettings() {
 
     <button onclick="handleLogout()" style="padding:10px 20px;background:rgba(214,60,60,0.1);border:1px solid rgba(214,60,60,0.3);border-radius:8px;color:var(--danger);font-size:14px;cursor:pointer;">Sign Out</button>
   `;
+}
+
+// ─── JOBBER INTEGRATION UI ───────────────────────────────────────────────────
+async function loadJobberStatus() {
+  try {
+    const resp = await fetch('/api/jobber/status', { credentials: 'include' });
+    const data = await resp.json();
+    const btnEl = document.getElementById('jobber-connect-btn');
+    const textEl = document.getElementById('jobber-status-text');
+    if (!btnEl) return;
+
+    if (data.connected) {
+      if (textEl) textEl.innerHTML = '<span style="color:var(--green-light);">✓ Connected</span>';
+      btnEl.innerHTML = `<button onclick="disconnectJobber()" style="padding:5px 12px;background:rgba(214,60,60,0.1);border:1px solid rgba(214,60,60,0.3);border-radius:20px;color:var(--danger);font-size:11px;font-weight:700;cursor:pointer;">Disconnect</button>`;
+    } else {
+      if (textEl) textEl.textContent = 'Pull jobs & client info into inspections';
+      btnEl.innerHTML = `<a href="/api/jobber/connect" style="padding:5px 14px;background:var(--green);border-radius:20px;color:#fff;font-size:11px;font-weight:700;text-decoration:none;">Connect</a>`;
+    }
+  } catch(e) {
+    console.error('Jobber status error', e);
+  }
+}
+
+async function disconnectJobber() {
+  if (!confirm('Disconnect Jobber? Job suggestions will stop working.')) return;
+  await fetch('/api/jobber/disconnect', { method: 'POST', credentials: 'include' });
+  loadJobberStatus();
+  showToast('Jobber disconnected');
 }
 
 function showChangePassword() {

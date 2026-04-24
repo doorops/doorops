@@ -94,8 +94,18 @@ function showNewInspectionForm() {
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
       <button onclick="loadInspections()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">←</button>
       <h1 style="margin:0;">New Inspection</h1>
-    </div>
+    </div>`;
+  // Load Jobber suggestions in background
+  loadJobberJobSuggestions();
+  page.innerHTML += `
     <div style="max-width:560px;">
+
+      <!-- Jobber job picker -->
+      <div id="jobber-jobs-section" style="margin-bottom:20px;display:none;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:8px;">📅 Today's Jobber Jobs</div>
+        <div id="jobber-jobs-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
       <div class="do-form-group">
         <label>Property Name</label>
         <input type="text" id="ni-prop-name" placeholder="e.g. Milton Logistics Centre" style="width:100%;">
@@ -127,6 +137,48 @@ function showNewInspectionForm() {
       </div>
     </div>
   `;
+}
+
+// Load Jobber jobs when new inspection form opens
+async function loadJobberJobSuggestions() {
+  try {
+    const resp = await fetch('/api/jobber/jobs/today', { credentials: 'include' });
+    if (!resp.ok) return;
+    const jobs = await resp.json();
+    if (!jobs.length) return;
+
+    const section = document.getElementById('jobber-jobs-section');
+    const list = document.getElementById('jobber-jobs-list');
+    if (!section || !list) return;
+
+    section.style.display = 'block';
+    // Store jobs on window to avoid inline JSON escaping issues
+    window._jobberJobs = jobs;
+    list.innerHTML = jobs.map((j, idx) => `
+      <div onclick="fillFromJobber(window._jobberJobs[${idx}])" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;transition:border-color 0.15s;" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-weight:600;font-size:13px;">#${j.job_number} — ${escDO(j.client_name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escDO(j.property_address)}</div>
+      </div>
+    `).join('');
+  } catch(e) { /* Jobber not connected, no-op */ }
+}
+
+function fillFromJobber(job) {
+  const nameEl = document.getElementById('ni-prop-name');
+  const addrEl = document.getElementById('ni-prop-addr');
+  const contactEl = document.getElementById('ni-contact-name');
+  const emailEl = document.getElementById('ni-contact-email');
+  if (nameEl) nameEl.value = job.client_name || '';
+  if (addrEl) addrEl.value = job.property_address || '';
+  if (contactEl) contactEl.value = job.client_name || '';
+  if (emailEl) emailEl.value = job.client_email || '';
+  showToast('Filled from Jobber job #' + job.job_number);
+  // Highlight the filled fields briefly
+  [nameEl, addrEl, contactEl, emailEl].forEach(el => {
+    if (!el) return;
+    el.style.borderColor = 'var(--green)';
+    setTimeout(() => { el.style.borderColor = ''; }, 2000);
+  });
 }
 
 async function submitNewInspection() {
@@ -221,6 +273,7 @@ function renderInspectionDetail() {
       <button onclick="addDeficiencyQuick()" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">⚠️ Add Deficiency</button>
       ${i.status === 'draft' ? `<button onclick="markComplete(${i.id})" style="padding:8px 14px;background:#22c55e22;border:1px solid #22c55e44;border-radius:8px;color:#22c55e;font-size:13px;cursor:pointer;">✓ Mark Complete</button>` : ''}
       <button onclick="openInspectionPdf(${i.id})" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">📄 PDF Report</button>
+      <button onclick="createJobberQuote(${i.id})" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">💼 Create Quote in Jobber</button>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:800px;">
@@ -589,4 +642,39 @@ function openInspectionPdf(id) {
 function escDO(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── CREATE JOBBER QUOTE ──────────────────────────────────────────────────────
+async function createJobberQuote(inspectionId) {
+  const defs = (_currentInspection?.deficiencies || []).filter(d => d.include_in_quote);
+  if (!defs.length) {
+    alert('No deficiencies marked "Include in Quote". Edit deficiencies and check the box first.');
+    return;
+  }
+  if (!confirm(`Create a Jobber quote with ${defs.length} line item${defs.length !== 1 ? 's' : ''}?`)) return;
+
+  showToast('Creating quote in Jobber…');
+  const resp = await fetch('/api/jobber/quote', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inspection_id: inspectionId })
+  });
+  const data = await resp.json();
+
+  if (!resp.ok) {
+    if (data.error && data.error.includes('Not connected')) {
+      alert('Jobber is not connected. Go to Settings → Integrations → Connect Jobber first.');
+    } else {
+      alert('Failed to create quote: ' + (data.error || 'Unknown error'));
+    }
+    return;
+  }
+
+  showToast('✓ Quote #' + data.quote_number + ' created in Jobber!');
+  if (data.url) {
+    setTimeout(() => {
+      if (confirm('Quote created! Open it in Jobber?')) window.open(data.url, '_blank');
+    }, 500);
+  }
 }
