@@ -379,10 +379,15 @@ async function submitAddDoor() {
 }
 
 // ─── DOOR DETAIL ──────────────────────────────────────────────────────────────
-function openDoorDetail(doorId) {
+async function openDoorDetail(doorId) {
   _currentDoor = (_currentInspection.doors || []).find(d => d.id === doorId);
   if (!_currentDoor) return;
-  renderDoorDetail();
+  // Use enhanced version if checklist.js is loaded
+  if (typeof renderDoorDetailWithPhotos === 'function') {
+    await renderDoorDetailWithPhotos(doorId);
+  } else {
+    renderDoorDetail();
+  }
 }
 
 function renderDoorDetail() {
@@ -575,9 +580,9 @@ async function markComplete(id) {
   renderInspectionDetail();
 }
 
-// ─── PDF PLACEHOLDER ──────────────────────────────────────────────────────────
+// ─── PDF REPORT ──────────────────────────────────────────────────────────────
 function openInspectionPdf(id) {
-  alert('PDF report generation coming soon!');
+  window.open('/api/pdf/inspection/' + id, '_blank');
 }
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
