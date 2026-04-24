@@ -102,7 +102,7 @@ function renderChecklistItem(item) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
         <div style="font-size:13px;flex:1;">${escDO(item.item)}${critTag}</div>
         <div style="display:flex;gap:4px;flex-shrink:0;">
-          <button onclick="setChecklistResult(${idx},'pass')" style="padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;${btnStyle('pass','#22c55e','#22c55e22')}">✓ Pass</button>
+          <button onclick="setChecklistResult(${idx},'pass')" style="padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;${btnStyle('pass','#4a6b35','#22c55e22')}">✓ Pass</button>
           <button onclick="setChecklistResult(${idx},'fail')" style="padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;${btnStyle('fail','#ef4444','#ef444422')}">✗ Fail</button>
           <button onclick="setChecklistResult(${idx},'na')" style="padding:4px 8px;border-radius:5px;font-size:11px;cursor:pointer;${btnStyle('na','#6b7280','#6b728022')}">N/A</button>
         </div>

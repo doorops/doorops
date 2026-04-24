@@ -27,11 +27,11 @@ router.get('/inspection/:id', requireAuth, async (req, res) => {
     res.setHeader('Content-Disposition', `inline; filename="DoorOps-Report-${req.params.id}.pdf"`);
     doc.pipe(res);
 
-    const ORANGE = '#F59E0B';
-    const DARK = '#111827';
+    const ORANGE = '#6a8f50';
+    const DARK = '#1e2832';
     const MUTED = '#6B7280';
-    const DANGER = '#EF4444';
-    const WARN = '#F97316';
+    const DANGER = '#d63c3c';
+    const WARN = '#d4a017';
     const pageW = doc.page.width - 100; // usable width
 
     // ── HEADER ──
