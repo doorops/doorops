@@ -18,15 +18,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
+// ---- TOKEN HELPERS ----
+function getToken() {
+  return localStorage.getItem('do_token') || '';
+}
+function setToken(t) {
+  if (t) localStorage.setItem('do_token', t);
+}
+function clearToken() {
+  localStorage.removeItem('do_token');
+}
+
+// Override fetch to always send token header
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+  const token = getToken();
+  if (token && String(url).startsWith('/')) {
+    opts.headers = opts.headers || {};
+    opts.headers['x-auth-token'] = token;
+  }
+  opts.credentials = 'include';
+  return _origFetch(url, opts);
+};
+
 async function checkAuth() {
   try {
-    const resp = await fetch('/api/auth/me', { credentials: 'include' });
+    const resp = await fetch('/api/auth/me');
     if (resp.ok) {
       const data = await resp.json();
       _currentUser = data;
       _currentCompany = { id: data.company_id, name: data.company_name, slug: data.slug, plan: data.plan };
       showApp();
     } else {
+      clearToken();
       showAuth();
     }
   } catch {
@@ -73,6 +97,7 @@ async function handleLogin(e) {
     });
     const data = await resp.json();
     if (!resp.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+    if (data.token) setToken(data.token);
     _currentUser = data.user;
     _currentCompany = data.company;
     showApp();
@@ -100,6 +125,7 @@ async function handleSignup(e) {
     });
     const data = await resp.json();
     if (!resp.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+    if (data.token) setToken(data.token);
     _currentUser = data.user;
     _currentCompany = data.company;
     showApp();
@@ -111,6 +137,7 @@ async function handleSignup(e) {
 
 async function handleLogout() {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  clearToken();
   _currentUser = null;
   _currentCompany = null;
   showAuth();

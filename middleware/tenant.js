@@ -3,7 +3,9 @@ const db = require('../db');
 
 // Verify JWT and attach user + company to request
 async function requireAuth(req, res, next) {
-  const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
+  const token = req.cookies?.token
+    || req.headers.authorization?.replace('Bearer ', '')
+    || req.headers['x-auth-token'];
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
 
   try {
