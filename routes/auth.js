@@ -33,7 +33,7 @@ router.post('/signup', async (req, res) => {
 
     const token = jwt.sign({ userId: user.id, companyId: company.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
-    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 30 * 24 * 60 * 60 * 1000 });
+    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 });
     res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, role: user.role }, company: { id: company.id, name: company.name, slug: company.slug, plan: company.plan } });
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Email already registered' });
@@ -63,7 +63,7 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign({ userId: user.id, companyId: user.company_id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
-    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 30 * 24 * 60 * 60 * 1000 });
+    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 });
     res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, role: user.role }, company: { id: user.company_id, name: user.company_name, slug: user.company_slug, plan: user.plan } });
   } catch (err) {
     console.error('[auth/login]', err);

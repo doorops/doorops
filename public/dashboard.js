@@ -284,11 +284,31 @@ async function loadJobberStatus() {
       btnEl.innerHTML = `<button onclick="disconnectJobber()" style="padding:5px 12px;background:rgba(214,60,60,0.1);border:1px solid rgba(214,60,60,0.3);border-radius:20px;color:var(--danger);font-size:11px;font-weight:700;cursor:pointer;">Disconnect</button>`;
     } else {
       if (textEl) textEl.textContent = 'Pull jobs & client info into inspections';
-      btnEl.innerHTML = `<a href="/api/jobber/connect" style="padding:5px 14px;background:var(--green);border-radius:20px;color:#fff;font-size:11px;font-weight:700;text-decoration:none;">Connect</a>`;
+      btnEl.innerHTML = `<button onclick="openJobberConnect()" style="padding:5px 14px;background:var(--green);border:none;border-radius:20px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">Connect</button>`;
     }
   } catch(e) {
     console.error('Jobber status error', e);
   }
+}
+
+function openJobberConnect() {
+  // Open in popup so main app session/cookie is preserved
+  const w = 600, h = 700;
+  const left = (screen.width - w) / 2;
+  const top = (screen.height - h) / 2;
+  const popup = window.open('/api/jobber/connect', 'jobber_oauth',
+    `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`);
+
+  // Poll for popup close and refresh status
+  const timer = setInterval(() => {
+    if (!popup || popup.closed) {
+      clearInterval(timer);
+      setTimeout(() => {
+        loadJobberStatus();
+        showToast('Checking Jobber connection…');
+      }, 500);
+    }
+  }, 500);
 }
 
 async function disconnectJobber() {

@@ -87,7 +87,7 @@ router.get('/connect', requireAuth, (req, res) => {
 // ─── OAuth: Callback ──────────────────────────────────────────────────────────
 router.get('/callback', async (req, res) => {
   const { code, state } = req.query;
-  if (!code) return res.redirect('/app?jobber=error');
+  if (!code) return res.send(`<!DOCTYPE html><html><body><script>if(window.opener){window.opener.postMessage({jobber:'error'},'${APP_URL}');window.close();}else{window.location='/#settings';}<\/script></body></html>`);
 
   try {
     const { companyId } = JSON.parse(Buffer.from(state, 'base64').toString());
@@ -108,10 +108,18 @@ router.get('/callback', async (req, res) => {
       [access_token, refresh_token, expiresAt, companyId]
     );
 
-    res.redirect('/#settings?jobber=connected');
+    // Close popup and notify parent window
+    res.send(`<!DOCTYPE html><html><body><script>
+      if (window.opener) {
+        window.opener.postMessage({ jobber: 'connected' }, '${APP_URL}');
+        window.close();
+      } else {
+        window.location = '/#settings';
+      }
+    <\/script><p>Jobber connected! You can close this window.</p></body></html>`);
   } catch (err) {
     console.error('[jobber/callback]', err.response?.data || err.message);
-    res.redirect('/#settings?jobber=error');
+    res.send(`<!DOCTYPE html><html><body><script>if(window.opener){window.opener.postMessage({jobber:'error'},'${APP_URL}');window.close();}else{window.location='/#settings';}<\/script><p>Connection failed. Close this window and try again.</p></body></html>`);
   }
 });
 

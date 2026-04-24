@@ -5,6 +5,17 @@ let _currentCompany = null;
 // ---- INIT ----
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
+
+  // Listen for Jobber OAuth popup messages
+  window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    if (e.data?.jobber === 'connected') {
+      showToast('✓ Jobber connected!');
+      if (typeof loadJobberStatus === 'function') loadJobberStatus();
+    } else if (e.data?.jobber === 'error') {
+      showToast('Jobber connection failed — try again');
+    }
+  });
 });
 
 async function checkAuth() {
