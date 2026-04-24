@@ -70,7 +70,7 @@ body {
 .logo-mark img {
   height: 60px;
   width: auto;
-  filter: brightness(0) invert(1);
+  
 }
 
 .logo-text {
@@ -202,7 +202,7 @@ body {
 .nav-brand img {
   height: 32px;
   width: auto;
-  filter: brightness(0) invert(1);
+  
 }
 
 .nav-brand-text {
