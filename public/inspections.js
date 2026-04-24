@@ -54,8 +54,8 @@ function renderInspectionList(list) {
   }
 
   el.innerHTML = list.map(i => {
-    const statusColor = { draft: '#94a3b8', complete: '#22c55e', sent: '#f59e0b' }[i.status] || '#94a3b8';
-    const statusLabel = { draft: 'Draft', complete: 'Complete', sent: 'Sent' }[i.status] || i.status;
+    const statusColor = { draft: '#94a3b8', in_progress: '#3b82f6', complete: '#22c55e', sent: '#a855f7' }[i.status] || '#94a3b8';
+    const statusLabel = { draft: 'Draft', in_progress: 'In Progress', complete: 'Complete', sent: 'Sent' }[i.status] || i.status;
     const date = i.inspection_date ? new Date(i.inspection_date).toLocaleDateString('en-CA') : 'No date';
     return `
       <div onclick="openInspection(${i.id})" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s;" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--border)'">
@@ -222,7 +222,10 @@ async function openInspection(id) {
 function renderInspectionDetail() {
   const i = _currentInspection;
   const page = document.getElementById('page-inspections');
-  const statusColor = { draft: '#94a3b8', complete: '#22c55e', sent: '#f59e0b' }[i.status] || '#94a3b8';
+  const statusColors = { draft: '#94a3b8', in_progress: '#3b82f6', complete: '#22c55e', sent: '#a855f7' };
+  const statusColor = statusColors[i.status] || '#94a3b8';
+  const statusLabels = { draft: 'Draft', in_progress: 'In Progress', complete: 'Complete', sent: 'Sent' };
+  const statusLabel = statusLabels[i.status] || i.status;
 
   const doorsHtml = (i.doors || []).map(d => `
     <div onclick="openDoorDetail(${d.id})" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--border)'">
@@ -258,7 +261,7 @@ function renderInspectionDetail() {
         <h1 style="margin:0;font-size:20px;">${escDO(i.property_name || i.property_address)}</h1>
         ${i.property_name ? `<div style="font-size:13px;color:var(--muted);">${escDO(i.property_address)}</div>` : ''}
       </div>
-      <span style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;">${i.status}</span>
+      <span style="background:${statusColor}22;color:${statusColor};border:1px solid ${statusColor}44;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:700;">${statusLabel}</span>
     </div>
 
     <div style="display:flex;gap:16px;margin-bottom:20px;font-size:12px;color:var(--muted);flex-wrap:wrap;">
@@ -271,7 +274,10 @@ function renderInspectionDetail() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
       <button class="btn-primary-do" onclick="showAddDoorForm()">+ Add Door</button>
       <button onclick="addDeficiencyQuick()" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">⚠️ Add Deficiency</button>
-      ${i.status === 'draft' ? `<button onclick="markComplete(${i.id})" style="padding:8px 14px;background:#22c55e22;border:1px solid #22c55e44;border-radius:8px;color:#22c55e;font-size:13px;cursor:pointer;">✓ Mark Complete</button>` : ''}
+      ${i.status === 'draft' ? `<button onclick="startInspection(${i.id})" style="padding:8px 14px;background:#3b82f622;border:1px solid #3b82f644;border-radius:8px;color:#3b82f6;font-size:13px;font-weight:700;cursor:pointer;">▶ Start Inspection</button>` : ''}
+      ${i.status === 'in_progress' ? `<button onclick="markComplete(${i.id})" style="padding:8px 14px;background:#22c55e22;border:1px solid #22c55e44;border-radius:8px;color:#22c55e;font-size:13px;font-weight:700;cursor:pointer;">✓ Mark Complete</button>` : ''}
+      ${(i.status === 'complete') ? `<button onclick="showSendReportModal(${i.id})" style="padding:8px 14px;background:#a855f722;border:1px solid #a855f744;border-radius:8px;color:#a855f7;font-size:13px;font-weight:700;cursor:pointer;">📧 Send Report</button>` : ''}
+      ${(i.status === 'sent') ? `<button onclick="showSendReportModal(${i.id})" style="padding:8px 14px;background:#a855f722;border:1px solid #a855f744;border-radius:8px;color:#a855f7;font-size:13px;cursor:pointer;">🔄 Resend Report</button>` : ''}
       <button onclick="openInspectionPdf(${i.id})" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">📄 PDF Report</button>
       <button onclick="createJobberQuote(${i.id})" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">💼 Create Quote in Jobber</button>
     </div>
@@ -286,6 +292,13 @@ function renderInspectionDetail() {
         ${defsHtml || '<div style="color:var(--muted);font-size:13px;">No deficiencies recorded.</div>'}
       </div>
     </div>
+    ${i.signature_data ? `
+    <div style="margin-top:20px;max-width:400px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px;">✍️ Signature</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
+        <img src="${i.signature_data}" alt="Signature" style="max-width:100%;border-radius:4px;">
+      </div>
+    </div>` : ''}
   `;
 }
 
@@ -624,13 +637,164 @@ async function deleteDeficiency(defId) {
   else renderInspectionDetail();
 }
 
-// ─── MARK COMPLETE ────────────────────────────────────────────────────────────
-async function markComplete(id) {
-  if (!confirm('Mark this inspection as complete?')) return;
-  await apiInsp('/' + id, 'PATCH', { status: 'complete' });
+// ─── STATUS WORKFLOW ─────────────────────────────────────────────────────────
+async function startInspection(id) {
+  const resp = await fetch('/api/inspections/' + id + '/status', {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'in_progress' })
+  });
+  if (!resp.ok) { showToast('Failed to update status'); return; }
   const updated = await apiInsp('/' + id, 'GET');
   _currentInspection = await updated.json();
   renderInspectionDetail();
+  showToast('Inspection started!');
+}
+
+async function markComplete(id) {
+  showSignatureModal(id);
+}
+
+function showSignatureModal(inspId) {
+  const existing = document.getElementById('sig-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'sig-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;max-width:480px;width:100%;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Sign to Complete</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Draw your signature below to mark this inspection complete.</div>
+      <div style="border:2px dashed var(--border);border-radius:8px;background:var(--bg);margin-bottom:12px;overflow:hidden;">
+        <canvas id="sig-canvas" width="432" height="180" style="display:block;touch-action:none;width:100%;cursor:crosshair;"></canvas>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;text-align:center;">Sign here</div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="clearSignature()" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;">Clear</button>
+        <button onclick="confirmComplete(${inspId})" style="flex:2;padding:10px;background:var(--green);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Confirm Complete</button>
+        <button onclick="document.getElementById('sig-modal').remove()" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const canvas = document.getElementById('sig-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  let drawing = false;
+
+  function getPos(e, isTouch) {
+    const r = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / r.width;
+    const scaleY = canvas.height / r.height;
+    const src = isTouch ? e.touches[0] : e;
+    return [(src.clientX - r.left) * scaleX, (src.clientY - r.top) * scaleY];
+  }
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const [x,y] = getPos(e, true); ctx.beginPath(); ctx.moveTo(x, y); });
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!drawing) return; const [x,y] = getPos(e, true); ctx.lineTo(x, y); ctx.stroke(); });
+  canvas.addEventListener('touchend', () => drawing = false);
+  canvas.addEventListener('mousedown', e => { drawing = true; const [x,y] = getPos(e, false); ctx.beginPath(); ctx.moveTo(x, y); });
+  canvas.addEventListener('mousemove', e => { if (!drawing) return; const [x,y] = getPos(e, false); ctx.lineTo(x, y); ctx.stroke(); });
+  canvas.addEventListener('mouseup', () => drawing = false);
+  canvas.addEventListener('mouseleave', () => drawing = false);
+}
+
+function clearSignature() {
+  const canvas = document.getElementById('sig-canvas');
+  if (!canvas) return;
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+async function confirmComplete(id) {
+  const canvas = document.getElementById('sig-canvas');
+  let signatureData = null;
+  if (canvas) {
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    const hasContent = Array.from(data).some(v => v !== 0);
+    if (hasContent) signatureData = canvas.toDataURL('image/png');
+  }
+
+  const body = { status: 'complete' };
+  if (signatureData) body.signature_data = signatureData;
+
+  const resp = await fetch('/api/inspections/' + id + '/status', {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  const modal = document.getElementById('sig-modal');
+  if (modal) modal.remove();
+
+  if (!resp.ok) { showToast('Failed to mark complete'); return; }
+  const updated = await apiInsp('/' + id, 'GET');
+  _currentInspection = await updated.json();
+  renderInspectionDetail();
+  showToast('\u2713 Inspection marked complete!');
+}
+
+function showSendReportModal(id) {
+  const i = _currentInspection;
+  const existing = document.getElementById('send-report-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'send-report-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;max-width:440px;width:100%;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px;">\ud83d\udce7 Send Report</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Send the PDF inspection report to the site contact.</div>
+      <div class="do-form-group">
+        <label>Send to:</label>
+        <input type="email" id="send-email-input" value="${escDO(i.contact_email || '')}" placeholder="contact@email.com" style="width:100%;">
+      </div>
+      <div id="send-report-msg" style="display:none;font-size:13px;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="submitSendReport(${id})" style="flex:2;padding:10px;background:var(--green);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;" id="send-report-btn">\ud83d\udce8 Send</button>
+        <button onclick="document.getElementById('send-report-modal').remove()" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:13px;cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function submitSendReport(id) {
+  const email = document.getElementById('send-email-input')?.value.trim();
+  const msgEl = document.getElementById('send-report-msg');
+  const btn = document.getElementById('send-report-btn');
+  if (!email) { if (msgEl) { msgEl.textContent = 'Email address required.'; msgEl.style.color = 'var(--danger)'; msgEl.style.display = 'block'; } return; }
+
+  if (btn) { btn.textContent = 'Sending\u2026'; btn.disabled = true; }
+
+  const resp = await fetch('/api/inspections/' + id + '/send-report', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  const data = await resp.json();
+
+  if (!resp.ok) {
+    if (msgEl) { msgEl.textContent = data.error || 'Failed to send.'; msgEl.style.color = 'var(--danger)'; msgEl.style.display = 'block'; }
+    if (btn) { btn.textContent = '\ud83d\udce8 Send'; btn.disabled = false; }
+    return;
+  }
+
+  const modal = document.getElementById('send-report-modal');
+  if (modal) modal.remove();
+
+  if (data.simulated) {
+    showToast('\ud83d\udce7 Report simulated (SMTP not configured)');
+  } else {
+    showToast('\u2713 Report sent to ' + (data.to || email) + '!');
+    const updated = await apiInsp('/' + id, 'GET');
+    _currentInspection = await updated.json();
+    renderInspectionDetail();
+  }
 }
 
 // ─── PDF REPORT ──────────────────────────────────────────────────────────────

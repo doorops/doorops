@@ -19,6 +19,17 @@ router.get('/inspection/:id', requireAuth, async (req, res) => {
 
     const doors = await db.query('SELECT * FROM inspection_doors WHERE inspection_id = $1 ORDER BY door_number', [req.params.id]);
     const defs = await db.query('SELECT * FROM inspection_deficiencies WHERE inspection_id = $1 ORDER BY severity DESC, created_at', [req.params.id]);
+    // Load door checklist results if available
+    let checklistResults = [];
+    try {
+      const clRes = await db.query(
+        `SELECT dcr.*, d.door_number, d.location FROM door_checklist_results dcr
+         JOIN inspection_doors d ON dcr.door_id = d.id
+         WHERE d.inspection_id = $1 ORDER BY d.door_number, dcr.item_key`,
+        [req.params.id]
+      );
+      checklistResults = clRes.rows;
+    } catch(e) { /* table may not exist */ }
 
     // Build PDF
     const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
@@ -39,7 +50,13 @@ router.get('/inspection/:id', requireAuth, async (req, res) => {
     doc.fill(ORANGE).fontSize(22).font('Helvetica-Bold').text('DoorOps', 50, 22);
     doc.fill('#FFFFFF').fontSize(10).font('Helvetica').text('Inspection Report', 50, 48);
     const now = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
-    doc.fill('#9CA3AF').fontSize(9).text(`Generated: ${now}`, 0, 56, { align: 'right', width: doc.page.width - 50 });
+    // Inspection number top-right
+    const inspNum = `INS-${String(i.id).padStart(6, '0')}`;
+    doc.fill(ORANGE).fontSize(10).font('Helvetica-Bold').text(inspNum, 0, 22, { align: 'right', width: doc.page.width - 50 });
+    doc.fill('#9CA3AF').fontSize(9).font('Helvetica').text(`Generated: ${now}`, 0, 36, { align: 'right', width: doc.page.width - 50 });
+    if (i.company_name) {
+      doc.fill('#9CA3AF').fontSize(9).text(i.company_name, 0, 48, { align: 'right', width: doc.page.width - 50 });
+    }
     doc.moveDown(3);
 
     // ── PROPERTY INFO ──
@@ -66,7 +83,7 @@ router.get('/inspection/:id', requireAuth, async (req, res) => {
 
     doc.moveDown(4);
 
-    // ── SUMMARY BOXES ──
+    // ── SUMMARY BOXES (two-column layout) ──
     const safetyCritical = defs.rows.filter(d => d.severity === 'safety_critical').length;
     const moderate = defs.rows.filter(d => d.severity === 'moderate').length;
     const advisory = defs.rows.filter(d => d.severity === 'advisory').length;
@@ -87,13 +104,21 @@ router.get('/inspection/:id', requireAuth, async (req, res) => {
       doc.fill('#9CA3AF').fontSize(8).font('Helvetica').text(s.label, x, summaryY + 36, { width: boxW, align: 'center' });
     });
 
-    if (quotedCost > 0) {
-      doc.moveDown(4);
-      doc.fill(MUTED).fontSize(9).font('Helvetica').text(`Estimated quoted repairs: `, 50, doc.y);
-      doc.fill(ORANGE).fontSize(9).font('Helvetica-Bold').text(`$${quotedCost.toFixed(2)}`, { continued: false });
-    }
+    // Second row: revenue opportunity + inspection number
+    const row2Y = summaryY + 62;
+    const halfW = (pageW - 10) / 2;
+    doc.roundedRect(50, row2Y, halfW, 40, 4).fill('#1F2937').stroke();
+    doc.fill(ORANGE).fontSize(14).font('Helvetica-Bold').text(
+      quotedCost > 0 ? `$${quotedCost.toFixed(2)}` : '—',
+      50, row2Y + 6, { width: halfW, align: 'center' }
+    );
+    doc.fill('#9CA3AF').fontSize(8).font('Helvetica').text('Revenue Opportunity', 50, row2Y + 26, { width: halfW, align: 'center' });
 
-    doc.moveDown(4);
+    doc.roundedRect(50 + halfW + 10, row2Y, halfW, 40, 4).fill('#1F2937').stroke();
+    doc.fill('#FFFFFF').fontSize(14).font('Helvetica-Bold').text(inspNum, 60 + halfW, row2Y + 6, { width: halfW, align: 'center' });
+    doc.fill('#9CA3AF').fontSize(8).font('Helvetica').text('Inspection #', 60 + halfW, row2Y + 26, { width: halfW, align: 'center' });
+
+    doc.moveDown(6);
 
     // ── DOORS ──
     if (doors.rows.length > 0) {
@@ -108,6 +133,7 @@ router.get('/inspection/:id', requireAuth, async (req, res) => {
         if (y > doc.page.height - 150) { doc.addPage(); y = 50; }
 
         const doorDefs = defs.rows.filter(d => d.door_id === door.id);
+        const doorChecklists = checklistResults.filter(c => c.door_id === door.id);
         const condColor = { good: '#22C55E', fair: WARN, poor: DANGER, critical: DANGER }[door.overall_condition] || MUTED;
 
         // Door header
@@ -145,6 +171,19 @@ router.get('/inspection/:id', requireAuth, async (req, res) => {
 
         if (door.notes) {
           doc.fill(MUTED).fontSize(8).font('Helvetica-Oblique').text('Notes: ' + door.notes, 54, y, { width: pageW - 8 });
+          y += doc.currentLineHeight() + 6;
+        }
+
+        // Checklist summary if available
+        if (doorChecklists.length > 0) {
+          if (y > doc.page.height - 80) { doc.addPage(); y = 50; }
+          const pass = doorChecklists.filter(c => c.result === 'pass').length;
+          const fail = doorChecklists.filter(c => c.result === 'fail').length;
+          const na = doorChecklists.filter(c => c.result === 'na' || !c.result).length;
+          doc.fill(MUTED).fontSize(8).font('Helvetica').text(
+            `Checklist: ✓ ${pass} Pass  ✗ ${fail} Fail  — ${na} N/A`,
+            54, y, { width: pageW - 8 }
+          );
           y += doc.currentLineHeight() + 6;
         }
 
@@ -198,11 +237,31 @@ router.get('/inspection/:id', requireAuth, async (req, res) => {
         });
         y += 8;
       });
+
+      // ── SIGN-OFF section ──
+      if (i.signature_data) {
+        if (y > doc.page.height - 120) { doc.addPage(); y = 50; }
+        doc.fill(ORANGE).fontSize(10).font('Helvetica-Bold').text('SIGN-OFF', 50, y + 10);
+        doc.moveTo(50, y + 26).lineTo(doc.page.width - 50, y + 26).strokeColor(ORANGE).lineWidth(1).stroke();
+        y += 32;
+
+        try {
+          const sigData = i.signature_data.replace(/^data:image\/png;base64,/, '');
+          const sigBuf = Buffer.from(sigData, 'base64');
+          doc.image(sigBuf, 50, y, { width: 200 });
+          y += 100;
+          doc.fill(MUTED).fontSize(8).font('Helvetica').text('Inspector signature', 50, y);
+          y += 16;
+        } catch(e) {
+          doc.fill(MUTED).fontSize(8).font('Helvetica').text('[Signature capture failed]', 50, y);
+          y += 20;
+        }
+      }
     }
 
     // ── FOOTER on last page ──
     doc.fill(MUTED).fontSize(8).font('Helvetica').text(
-      `DoorOps · app.doorops.app · Generated ${now} · ${i.company_name || 'DoorOps Report'}`,
+      `DoorOps · app.doorops.app · Generated ${now} · ${i.company_name || 'DoorOps Report'} · ${inspNum}`,
       50, doc.page.height - 40, { align: 'center', width: pageW }
     );
 

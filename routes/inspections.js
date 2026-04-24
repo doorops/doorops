@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireAuth } = require('../middleware/tenant');
+const nodemailer = require('nodemailer');
+const PDFDocument = require('pdfkit');
 
 // ─── LIST inspections for company ────────────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
@@ -100,6 +102,169 @@ router.patch('/:id', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// ─── STATUS update ───────────────────────────────────────────────────────────
+router.patch('/:id/status', requireAuth, async (req, res) => {
+  try {
+    const { status, signature_data } = req.body;
+    const allowed = ['draft', 'in_progress', 'complete', 'sent'];
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+
+    const fields = ['status = $1'];
+    const vals = [status];
+    let idx = 2;
+
+    if (signature_data !== undefined) {
+      fields.push(`signature_data = $${idx++}`);
+      vals.push(signature_data);
+    }
+
+    fields.push(`updated_at = NOW()`);
+    vals.push(req.params.id, req.companyId);
+
+    await db.query(
+      `UPDATE inspections SET ${fields.join(', ')} WHERE id = $${idx++} AND company_id = $${idx}`,
+      vals
+    );
+    const updated = await db.query('SELECT * FROM inspections WHERE id = $1', [req.params.id]);
+    res.json(updated.rows[0]);
+  } catch (err) {
+    console.error('[inspections/status]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─── SEND REPORT via email ────────────────────────────────────────────────────
+router.post('/:id/send-report', requireAuth, async (req, res) => {
+  try {
+    const insp = await db.query(
+      'SELECT i.*, u.name as inspector_name, c.name as company_name FROM inspections i LEFT JOIN users u ON i.inspector_id = u.id LEFT JOIN companies c ON i.company_id = c.id WHERE i.id = $1 AND i.company_id = $2',
+      [req.params.id, req.companyId]
+    );
+    if (!insp.rows.length) return res.status(404).json({ error: 'Not found' });
+    const i = insp.rows[0];
+
+    const toEmail = req.body.email || i.contact_email;
+    if (!toEmail) return res.status(400).json({ error: 'No recipient email' });
+
+    // Check SMTP config
+    const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+    if (!smtpConfigured) {
+      return res.json({ ok: true, simulated: true, message: 'Email simulated (SMTP not configured)', to: toEmail });
+    }
+
+    // Generate PDF buffer
+    const doors = await db.query('SELECT * FROM inspection_doors WHERE inspection_id = $1 ORDER BY door_number', [req.params.id]);
+    const defs = await db.query('SELECT * FROM inspection_deficiencies WHERE inspection_id = $1 ORDER BY severity DESC, created_at', [req.params.id]);
+
+    const pdfBuffer = await generatePdfBuffer(i, doors.rows, defs.rows);
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_PORT === '465',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    });
+
+    const dateStr = i.inspection_date ? new Date(i.inspection_date).toLocaleDateString('en-CA') : new Date().toLocaleDateString('en-CA');
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: toEmail,
+      subject: `Inspection Report - ${i.property_address} - ${dateStr}`,
+      text: `Please find attached the inspection report for ${i.property_address}.\n\nInspected by: ${i.inspector_name || 'DoorOps'}\nDate: ${dateStr}\n\n${i.company_name || 'DoorOps'}`,
+      attachments: [{
+        filename: `DoorOps-Report-${req.params.id}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }]
+    });
+
+    // Mark as sent
+    await db.query("UPDATE inspections SET status = 'sent', updated_at = NOW() WHERE id = $1", [req.params.id]);
+
+    res.json({ ok: true, to: toEmail });
+  } catch (err) {
+    console.error('[inspections/send-report]', err);
+    res.status(500).json({ error: 'Failed to send report' });
+  }
+});
+
+async function generatePdfBuffer(i, doors, defs) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const ORANGE = '#6a8f50';
+    const DARK = '#1e2832';
+    const MUTED = '#6B7280';
+    const DANGER = '#d63c3c';
+    const WARN = '#d4a017';
+    const pageW = doc.page.width - 100;
+
+    doc.rect(0, 0, doc.page.width, 80).fill(DARK);
+    doc.fill(ORANGE).fontSize(22).font('Helvetica-Bold').text('DoorOps', 50, 22);
+    doc.fill('#FFFFFF').fontSize(10).font('Helvetica').text('Inspection Report', 50, 48);
+    const now = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+    doc.fill('#9CA3AF').fontSize(9).text(`Generated: ${now}`, 0, 56, { align: 'right', width: doc.page.width - 50 });
+    doc.moveDown(3);
+
+    doc.fill(ORANGE).fontSize(11).font('Helvetica-Bold').text('PROPERTY', 50, 100);
+    doc.moveTo(50, 115).lineTo(doc.page.width - 50, 115).strokeColor(ORANGE).lineWidth(1).stroke();
+    doc.fill(DARK).fontSize(18).font('Helvetica-Bold').text(i.property_name || i.property_address, 50, 122);
+    if (i.property_name) doc.fill(MUTED).fontSize(11).font('Helvetica').text(i.property_address, 50, doc.y + 2);
+
+    const infoY = doc.y + 10;
+    const cols = [
+      ['Date', i.inspection_date ? new Date(i.inspection_date).toLocaleDateString('en-CA') : 'N/A'],
+      ['Inspector', i.inspector_name || 'N/A'],
+      ['Contact', i.contact_name || 'N/A'],
+      ['Status', (i.status || 'draft').toUpperCase()],
+    ];
+    cols.forEach((col, idx) => {
+      const x = 50 + (idx * (pageW / 4));
+      doc.fill(MUTED).fontSize(8).font('Helvetica').text(col[0].toUpperCase(), x, infoY);
+      doc.fill(DARK).fontSize(10).font('Helvetica-Bold').text(col[1], x, infoY + 12, { width: pageW / 4 - 10 });
+    });
+    doc.moveDown(4);
+
+    const safetyCritical = defs.filter(d => d.severity === 'safety_critical').length;
+    const moderate = defs.filter(d => d.severity === 'moderate').length;
+    const advisory = defs.filter(d => d.severity === 'advisory').length;
+    const quotedCost = defs.filter(d => d.include_in_quote).reduce((s, d) => s + (parseFloat(d.estimated_cost) || 0), 0);
+
+    doc.fill(MUTED).fontSize(9).font('Helvetica').text(
+      `Doors: ${doors.length} | Safety Critical: ${safetyCritical} | Moderate: ${moderate} | Advisory: ${advisory}${quotedCost > 0 ? ` | Est. Repairs: $${quotedCost.toFixed(2)}` : ''}`,
+      50, doc.y + 8
+    );
+
+    if (defs.length > 0) {
+      doc.addPage();
+      doc.fill(ORANGE).fontSize(11).font('Helvetica-Bold').text('DEFICIENCIES', 50, 50);
+      doc.moveTo(50, 65).lineTo(doc.page.width - 50, 65).strokeColor(ORANGE).lineWidth(1).stroke();
+      let y = 75;
+      defs.forEach(def => {
+        if (y > doc.page.height - 60) { doc.addPage(); y = 50; }
+        const sevColor = { advisory: ORANGE, moderate: WARN, safety_critical: DANGER }[def.severity] || MUTED;
+        const sevLabel = { advisory: 'ADVISORY', moderate: 'MODERATE', safety_critical: 'SAFETY CRITICAL' }[def.severity] || def.severity.toUpperCase();
+        const door = doors.find(d => d.id === def.door_id);
+        doc.rect(50, y, 3, 36).fill(sevColor);
+        doc.fill(sevColor).fontSize(7).font('Helvetica-Bold').text(sevLabel + (door ? ` · Door ${door.door_number}` : ''), 58, y + 2);
+        doc.fill(DARK).fontSize(9).font('Helvetica').text(def.description, 58, y + 12, { width: pageW - 12 });
+        y = doc.y + 8;
+      });
+    }
+
+    doc.fill(MUTED).fontSize(8).font('Helvetica').text(
+      `DoorOps · app.doorops.app · ${i.company_name || 'DoorOps Report'}`,
+      50, doc.page.height - 40, { align: 'center', width: pageW }
+    );
+
+    doc.end();
+  });
+}
 
 // ─── DELETE inspection ────────────────────────────────────────────────────────
 router.delete('/:id', requireAuth, async (req, res) => {

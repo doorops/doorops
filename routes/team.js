@@ -82,14 +82,22 @@ router.delete('/:id', requireAuth, async (req, res) => {
 // ─── Dashboard stats ──────────────────────────────────────────────────────────
 router.get('/stats/dashboard', requireAuth, async (req, res) => {
   try {
-    const [inspTotal, inspDraft, inspComplete, inspThisMonth, defTotal, defCritical, teamCount] = await Promise.all([
+    const [inspTotal, inspDraft, inspComplete, inspThisMonth, inspThisWeek,
+           defTotal, defCritical, defModerate, defAdvisory, teamCount,
+           openDefs, revOpp, safetyOpen] = await Promise.all([
       db.query('SELECT COUNT(*) FROM inspections WHERE company_id = $1', [req.companyId]),
       db.query("SELECT COUNT(*) FROM inspections WHERE company_id = $1 AND status = 'draft'", [req.companyId]),
-      db.query("SELECT COUNT(*) FROM inspections WHERE company_id = $1 AND status = 'complete'", [req.companyId]),
+      db.query("SELECT COUNT(*) FROM inspections WHERE company_id = $1 AND status IN ('complete','sent')", [req.companyId]),
       db.query("SELECT COUNT(*) FROM inspections WHERE company_id = $1 AND created_at >= date_trunc('month', NOW())", [req.companyId]),
+      db.query("SELECT COUNT(*) FROM inspections WHERE company_id = $1 AND created_at >= date_trunc('week', NOW())", [req.companyId]),
       db.query('SELECT COUNT(*) FROM inspection_deficiencies def JOIN inspections i ON def.inspection_id = i.id WHERE i.company_id = $1', [req.companyId]),
       db.query("SELECT COUNT(*) FROM inspection_deficiencies def JOIN inspections i ON def.inspection_id = i.id WHERE i.company_id = $1 AND def.severity = 'safety_critical'", [req.companyId]),
+      db.query("SELECT COUNT(*) FROM inspection_deficiencies def JOIN inspections i ON def.inspection_id = i.id WHERE i.company_id = $1 AND def.severity = 'moderate'", [req.companyId]),
+      db.query("SELECT COUNT(*) FROM inspection_deficiencies def JOIN inspections i ON def.inspection_id = i.id WHERE i.company_id = $1 AND def.severity = 'advisory'", [req.companyId]),
       db.query('SELECT COUNT(*) FROM users WHERE company_id = $1', [req.companyId]),
+      db.query("SELECT COUNT(*) FROM inspection_deficiencies def JOIN inspections i ON def.inspection_id = i.id WHERE i.company_id = $1 AND i.status != 'sent'", [req.companyId]),
+      db.query("SELECT COALESCE(SUM(def.estimated_cost),0) FROM inspection_deficiencies def JOIN inspections i ON def.inspection_id = i.id WHERE i.company_id = $1 AND def.include_in_quote = true", [req.companyId]),
+      db.query("SELECT COUNT(*) FROM inspection_deficiencies def JOIN inspections i ON def.inspection_id = i.id WHERE i.company_id = $1 AND def.severity = 'safety_critical' AND i.status != 'sent'", [req.companyId]),
     ]);
 
     const recent = await db.query(
@@ -100,7 +108,7 @@ router.get('/stats/dashboard', requireAuth, async (req, res) => {
        LEFT JOIN inspection_deficiencies def ON def.inspection_id = i.id
        WHERE i.company_id = $1
        GROUP BY i.id, u.name
-       ORDER BY i.created_at DESC LIMIT 5`,
+       ORDER BY i.created_at DESC LIMIT 10`,
       [req.companyId]
     );
 
@@ -109,9 +117,17 @@ router.get('/stats/dashboard', requireAuth, async (req, res) => {
       draft_inspections: parseInt(inspDraft.rows[0].count),
       complete_inspections: parseInt(inspComplete.rows[0].count),
       inspections_this_month: parseInt(inspThisMonth.rows[0].count),
+      this_week: parseInt(inspThisWeek.rows[0].count),
+      this_month: parseInt(inspThisMonth.rows[0].count),
+      completed: parseInt(inspComplete.rows[0].count),
       total_deficiencies: parseInt(defTotal.rows[0].count),
       critical_deficiencies: parseInt(defCritical.rows[0].count),
+      moderate_deficiencies: parseInt(defModerate.rows[0].count),
+      advisory_deficiencies: parseInt(defAdvisory.rows[0].count),
       team_count: parseInt(teamCount.rows[0].count),
+      open_deficiencies: parseInt(openDefs.rows[0].count),
+      revenue_opportunity: parseFloat(revOpp.rows[0].coalesce),
+      safety_critical_open: parseInt(safetyOpen.rows[0].count),
       recent_inspections: recent.rows
     });
   } catch (err) {

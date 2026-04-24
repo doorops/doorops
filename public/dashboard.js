@@ -29,24 +29,37 @@ async function loadDashboard() {
     if (!resp.ok) throw new Error();
     const s = await resp.json();
 
-    document.getElementById('dash-stats').innerHTML = `
-      ${statCard(s.total_inspections, 'Total Inspections', '🔍', '')}
-      ${statCard(s.inspections_this_month, 'This Month', '📅', '')}
-      ${statCard(s.critical_deficiencies, 'Safety Critical', '🔴', s.critical_deficiencies > 0 ? 'color:var(--danger)' : '')}
-      ${statCard(s.complete_inspections, 'Completed', '✅', '')}
+    // Severity alert bar
+    const alertBar = (s.safety_critical_open > 0 || s.moderate_deficiencies > 0 || s.advisory_deficiencies > 0) ? `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
+        <span style="font-size:13px;font-weight:700;color:var(--danger);">\ud83d\udd34 ${s.safety_critical_open || 0} Critical</span>
+        <span style="font-size:13px;font-weight:700;color:#d4a017;">\ud83d\udfe1 ${s.moderate_deficiencies || 0} Moderate</span>
+        <span style="font-size:13px;font-weight:700;color:var(--green-light);">\ud83d\udfe2 ${s.advisory_deficiencies || 0} Advisory</span>
+      </div>` : '';
+
+    document.getElementById('dash-stats').innerHTML = alertBar + `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">
+        ${statCard(s.total_inspections, 'Total', '\ud83d\udd0d', '')}
+        ${statCard(s.this_week || 0, 'This Week', '\ud83d\udcc5', '')}
+        ${statCard(s.open_deficiencies || 0, 'Open Deficiencies', '\u26a0\ufe0f', (s.open_deficiencies || 0) > 0 ? 'color:var(--warn)' : '')}
+        ${statCard('$' + (s.revenue_opportunity || 0).toLocaleString('en-CA', {minimumFractionDigits:0, maximumFractionDigits:0}), 'Revenue Opp.', '\ud83d\udcb0', 'color:var(--green-light)')}
+      </div>
     `;
 
     // Recent inspections
+    const _statusColors = { draft: '#94a3b8', in_progress: '#3b82f6', complete: '#22c55e', sent: '#a855f7' };
+    const _statusLabels = { draft: 'Draft', in_progress: 'In Progress', complete: 'Complete', sent: 'Sent' };
     document.getElementById('dash-recent').innerHTML = `
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:12px;">Recent Inspections</div>
       ${s.recent_inspections.length ? s.recent_inspections.map(i => {
-        const statusColor = { draft: 'var(--muted)', complete: 'var(--advisory)', sent: 'var(--warn)' }[i.status] || 'var(--muted)';
+        const sc = _statusColors[i.status] || '#94a3b8';
+        const sl = _statusLabels[i.status] || i.status;
         return `<div onclick="navigate('inspections');setTimeout(()=>openInspection(${i.id}),300)" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:border-color 0.15s;" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="font-weight:600;font-size:13px;">${escDO(i.property_name || i.property_address)}</div>
-            <span style="font-size:10px;font-weight:700;color:${statusColor};text-transform:uppercase;">${i.status}</span>
+            <span style="background:${sc}22;color:${sc};border:1px solid ${sc}44;border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;">${sl}</span>
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px;">${i.inspection_date ? new Date(i.inspection_date).toLocaleDateString('en-CA') : 'No date'} · ${i.deficiency_count} deficiencies</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">${i.inspection_date ? new Date(i.inspection_date).toLocaleDateString('en-CA') : 'No date'} \u00b7 ${i.deficiency_count} deficiencies</div>
         </div>`;
       }).join('') : '<div style="color:var(--muted);font-size:13px;">No inspections yet.</div>'}
     `;
@@ -228,10 +241,15 @@ function loadSettings() {
     <!-- Company -->
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:16px;max-width:600px;">
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--green-light);margin-bottom:14px;">Company</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;">
-        <div><div style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:3px;">Name</div><div style="font-weight:600;">${escDO(c?.name||'')}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:3px;">Plan</div><div style="font-weight:600;text-transform:capitalize;">${c?.plan||'trial'}</div></div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:11px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px;">Company Name</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="company-name-input" value="${escDO(c?.name||'')}" placeholder="Your company name" style="flex:1;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;">
+          <button onclick="saveCompanyName()" style="padding:9px 16px;background:var(--green);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Save</button>
+        </div>
+        <div id="company-name-msg" style="display:none;font-size:12px;margin-top:6px;"></div>
       </div>
+      <div><div style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:3px;">Plan</div><div style="font-weight:600;text-transform:capitalize;font-size:13px;">${c?.plan||'trial'}</div></div>
     </div>
 
     <!-- Integrations -->
@@ -289,6 +307,30 @@ async function loadJobberStatus() {
   } catch(e) {
     console.error('Jobber status error', e);
   }
+}
+
+async function saveCompanyName() {
+  const input = document.getElementById('company-name-input');
+  const msg = document.getElementById('company-name-msg');
+  const name = input?.value.trim();
+  if (!name) { if (msg) { msg.textContent = 'Name required.'; msg.style.color = 'var(--danger)'; msg.style.display = 'block'; } return; }
+
+  const resp = await fetch('/api/settings/company', {
+    method: 'PUT', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  const data = await resp.json();
+
+  if (!resp.ok) {
+    if (msg) { msg.textContent = data.error || 'Failed to save.'; msg.style.color = 'var(--danger)'; msg.style.display = 'block'; }
+    return;
+  }
+
+  if (msg) { msg.textContent = '\u2713 Company name updated!'; msg.style.color = 'var(--green-light)'; msg.style.display = 'block'; }
+  // Update cached company object
+  if (window._currentCompany) window._currentCompany.name = data.name;
+  showToast('Company name saved!');
 }
 
 function openJobberConnect() {
