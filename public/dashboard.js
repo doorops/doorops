@@ -203,7 +203,7 @@ async function removeMember(id, name) {
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 function loadSettings() {
-  setTimeout(loadJobberStatus, 200); // Load after DOM renders
+  setTimeout(loadJobberStatus, 400); // Load after DOM renders
   const page = document.getElementById('page-settings');
   const u = _currentUser;
   const c = _currentCompany;

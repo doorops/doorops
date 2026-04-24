@@ -1,6 +1,11 @@
-// DoorOps — Frontend App
+// DoorOps — Frontend App v2
 let _currentUser = null;
 let _currentCompany = null;
+
+// Register service worker to clear PWA cache
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(r => r.update()).catch(() => {});
+}
 
 // ---- INIT ----
 document.addEventListener('DOMContentLoaded', async () => {
